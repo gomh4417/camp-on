@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
                 Text("PC의 127.0.0.1:8088에서 차량 상태·입력을 만듭니다. 탭을 활성 상태로 유지하세요. 앱에서 SDK 값이 읽혀도 콘솔 연결은 별도로 끊길 수 있습니다.")
                 HorizontalDivider()
                 Text("온도를 바꾸려면",style=MaterialTheme.typography.titleMedium)
-                Text("1. 홈 탑뷰의 운전석·동승석 + / −를 누릅니다.\n2. 별도 적용이나 캠핑 시작 없이 해당 좌석으로 즉시 전송됩니다.\n3. 반영 대기 중에는 요청값을 따로 표시합니다. 현재값은 실제 차량 응답 후 바뀝니다.\n4. 공조 전원이 꺼져 있으면 공조 조절 화면에서 켭니다.")
+                Text("1. 홈의 큰 차량 그림에서 좌석을 선택하고 + / − 또는 온도 슬라이더를 조절합니다. 슬라이더는 손을 뗄 때 전송합니다.\n2. 별도 적용이나 캠핑 시작 없이 해당 좌석으로 즉시 전송됩니다.\n3. 반영 대기 중에는 요청값을 따로 표시합니다. 현재값은 실제 차량 응답 후 바뀝니다.\n4. 공조 전원이 꺼져 있으면 공조 조절 화면에서 켭니다.")
                 Text("웹 콘솔에서는 Climate → Target Temperature의 같은 좌석을 확인합니다. 실내 온도는 센서값이라 목표 온도 변경과 동시에 바뀌지 않습니다.")
                 HorizontalDivider()
                 Text("내 차량 주행",style=MaterialTheme.typography.titleMedium)

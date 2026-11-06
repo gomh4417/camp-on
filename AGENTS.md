@@ -1,8 +1,9 @@
 # CAMP:ON project rules
 
 - Preserve existing Kotlin / Compose versions and single app module.
-- Korean UI and reports. Image-led cabin workspace: overhead cabin plan with directly accessible driver/passenger temperature controls and visual climate/light/seat entry cards. Restrained charcoal surfaces, accessible touch targets and system insets.
-- Individual controls send on explicit +/- or switch interaction without a seat-selection/apply step. Distinguish SDK acceptance, pending read-back and confirmed values; never display requested values as observed values. Mode batches retain explicit apply.
+- Korean UI and reports. Light, flat, friendly casual service: soft gray background, white cards, restrained blue accent, no glass/blur, heavy shadows, dark charcoal panels or 3D decorations. This project brief overrides solid-glass defaults. Use ui-ux-pro-max for hierarchy/accessibility. Preserve system insets.
+- Make the overhead cabin large, using available vertical space. Compose a separate transparent shell and independently selectable seat layers. Selection uses a flat pressed fill, outline and check, and opens the matching controls beside the map. Selecting a seat never actuates the vehicle. Explicit +/- or switch sends immediately; temperature slider sends once on release. Keep at least 56dp touch targets and responsive reflow.
+- Distinguish SDK acceptance, pending read-back and confirmed values; never display requested values as observed values. Mode batches retain explicit apply.
 - Pretendard Regular, Medium, ExtraBold only. Avoid green-heavy multicolor styling.
 - Complete implementation before one final verification phase. Do not repeatedly build while editing.
 - Push completed work to https://github.com/gomh4417/camp-on.git; never publish local credentials or IDE caches.

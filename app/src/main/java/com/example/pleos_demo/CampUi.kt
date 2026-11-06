@@ -186,8 +186,8 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
 @Composable private fun Dashboard(s:CampSession,wide:Boolean,start:()->Unit,edit:(Int)->Unit,presets:()->Unit,plan:()->Unit,detail:()->Unit,apply:()->Unit) {
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {
         Column(Modifier.weight(1f)) {
-            Caption("STAY A LITTLE LONGER")
-            Text(if(s.active) s.mode.subtitle else "오늘의 쉼을 켜세요",style=MaterialTheme.typography.headlineLarge)
+            Caption("오늘도, 편안한 캠핑")
+            Text(if(s.active) s.mode.subtitle else "우리만의 쉼을 시작해요",style=MaterialTheme.typography.headlineLarge)
         }
         if(!s.active) PrimaryAction("캠핑 시작",s.canControl,action=start)
         else if(s.mode==CampMode.SLEEP) SecondaryAction("화면 최소화") { s.updateMinimized(true) }
@@ -195,7 +195,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     Split(wide,left={
         CabinPanel(s,edit,presets)
         Panel(Modifier.fillMaxWidth()) {
-            Caption("ACTIVITY · 머무는 방식")
+            Caption("지금은 어떤 시간인가요?")
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 CampMode.visible.forEach { m->
                     OutlinedButton(onClick={s.selectMode(m)},enabled=!s.busy,
@@ -203,7 +203,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                         colors=ButtonDefaults.outlinedButtonColors(containerColor=if(s.selected==m) CampAccent else Color.Transparent,
                             contentColor=if(s.selected==m) CampBackground else CampInk)) {
                         Column(horizontalAlignment=Alignment.CenterHorizontally) {
-                            Text(m.name,style=MaterialTheme.typography.titleLarge);Text(m.label,style=MaterialTheme.typography.bodySmall)
+                            Text(m.label,style=MaterialTheme.typography.titleLarge)
                         }
                     }
                 }
@@ -218,7 +218,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
         }
     },right={
         Panel(Modifier.fillMaxWidth(),emphasis=true) {
-            Caption("ENERGY · 남은 여유")
+            Caption("오늘 쓸 수 있는 여유")
             Text("계획 후 여유",style=MaterialTheme.typography.titleLarge)
             Row(verticalAlignment=Alignment.Bottom) {
                 Text(s.budget?.margin.fmt(),style=MaterialTheme.typography.displayMedium)
@@ -245,17 +245,16 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
 }
 @Composable private fun CabinPanel(s:CampSession,edit:(Int)->Unit,presets:()->Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CampSurface)) {
-        CabinPlan(s,s.reading.controls.filter { it.kind==ControlKind.TEMPERATURE },Modifier.fillMaxWidth())
+        CabinPlan(s,s.reading.controls.filter { it.kind in listOf(ControlKind.TEMPERATURE,ControlKind.SEAT_TEMPERATURE) },Modifier.fillMaxWidth())
         Column(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 listOf(ControlKind.TEMPERATURE,ControlKind.LIGHT,ControlKind.SEAT_POSITION).forEachIndexed { index,kind->
                     val c=s.reading.controls.firstOrNull { it.kind==kind }
-                    Card(onClick={edit(index)},modifier=Modifier.weight(1f),shape=RoundedCornerShape(18.dp),
+                    Card(onClick={edit(index)},modifier=Modifier.weight(1f).semantics { contentDescription=listOf("공조 조절","조명 조절","시트 조절")[index] },shape=RoundedCornerShape(18.dp),
                         colors=CardDefaults.cardColors(containerColor=CampBackground)) {
                         Box(Modifier.fillMaxWidth().height(104.dp)) {
-                            Image(painterResource(if(index==2)R.drawable.cabin_top else R.drawable.cabin_clay),null,
-                                Modifier.fillMaxSize(),contentScale=ContentScale.Crop,
-                                colorFilter=if(index==1)androidx.compose.ui.graphics.ColorFilter.tint(CampAccent,androidx.compose.ui.graphics.BlendMode.Modulate) else null)
+                            Image(painterResource(if(index==2)R.drawable.cabin_flat_seat else R.drawable.cabin_flat_shell),null,
+                                Modifier.fillMaxSize().padding(12.dp),contentScale=ContentScale.Fit)
                         }
                         Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                             Text(listOf("공조 조절","조명 조절","시트 조절")[index],style=MaterialTheme.typography.titleMedium)
@@ -265,7 +264,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                 }
             }
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                Caption("이미지 카드를 눌러 영역별로 조절하세요")
+                Caption("공기와 빛도 내 취향으로 맞춰요")
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick=presets,enabled=s.fresh && !s.busy) { Text("현재 설정 저장") }
             }
@@ -287,7 +286,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     }
 }
 @Composable private fun PlanScreen(s:CampSession,wide:Boolean,detail:()->Unit) {
-    Text("남은 시간을 계획하세요",style=MaterialTheme.typography.headlineLarge)
+    Text("얼마나 더 쉬어볼까요?",style=MaterialTheme.typography.headlineLarge)
     Split(wide,left={
         Panel(Modifier.fillMaxWidth()) {
             Caption("01  캠핑 일정")
@@ -387,7 +386,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
         b.margin<1.0->"캠핑 에너지 여유가 적습니다"
         else->null
     }
-    if(title!=null) Column(Modifier.fillMaxWidth().background(Color(0xFF332D27),RoundedCornerShape(18.dp)).padding(20.dp),
+    if(title!=null) Column(Modifier.fillMaxWidth().background(Color(0xFFFFF3DF),RoundedCornerShape(18.dp)).padding(20.dp),
         verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(title,color=CampWarning,style=MaterialTheme.typography.titleMedium)
         if(!s.fresh) Caption("최근 수신 ${stamp(s.reading.time)} · 연결이 갱신되면 다시 계산합니다.")
@@ -398,7 +397,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
             TextButton(onClick=departure) { Text("귀가·충전 확인") }
         }
     }
-    if(!s.parkingState.allowsControl && s.active) Caption("주차 상태에서 차량 환경을 조절할 수 있습니다.")
+    if(!s.parkingState.allowsControl && s.active) Caption("일괄 설정과 시트 조절은 주차 후 이용해요.")
 }
 @Composable private fun EnergyDetail(s:CampSession,back:()->Unit) {
     Text("에너지의 흐름",style=MaterialTheme.typography.headlineLarge)
@@ -451,7 +450,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
 }
 @Composable private fun DepartureScreen(s:CampSession,wide:Boolean,end:()->Unit,manual:()->Unit,plan:()->Unit) {
     val context=LocalContext.current
-    Text("다음 여정을 준비하세요",style=MaterialTheme.typography.headlineLarge)
+    Text("돌아가는 길도 편안하게",style=MaterialTheme.typography.headlineLarge)
     Split(wide,left={
         Panel(Modifier.fillMaxWidth()) {
             Caption("01  캠핑 종료")

@@ -44,6 +44,7 @@ private fun VehicleControl.zone():String {
     if(help) PleosGuide { help=false }
     val controls=s.reading.controls.filter { it.category()==group }
     val temperatures=controls.filter { it.kind==ControlKind.TEMPERATURE }
+    val mapped=if(group==0) temperatures else controls.filter { ":" in it.id && it.id.substringAfter(":")!="GLOBAL" }
     val basic=controls.filter { it.kind in listOf(ControlKind.POWER,ControlKind.FAN,ControlKind.AC,ControlKind.RECIRCULATION) }
     val extra=controls-temperatures-basic
     val close={ if(!s.busy) dismiss() }
@@ -54,8 +55,8 @@ private fun VehicleControl.zone():String {
                 Column(Modifier.fillMaxSize().padding(if(wide)24.dp else 16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Caption("CABIN CONTROL")
-                            Text("내 공간, 바로 조절",style=MaterialTheme.typography.headlineMedium)
+                            Caption("내 차의 편안함")
+                            Text("편한 자리로 바꿔볼까요?",style=MaterialTheme.typography.headlineMedium)
                         }
                         TextButton(onClick={help=true}) { Text("사용법") }
                         SecondaryAction("닫기",!s.busy,action=close)
@@ -68,7 +69,7 @@ private fun VehicleControl.zone():String {
                     }
                     if(wide) Row(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(20.dp)) {
                         Column(Modifier.weight(1.3f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                            CabinPlan(s,temperatures,Modifier.fillMaxWidth())
+                            CabinPlan(s,mapped,Modifier.fillMaxWidth())
                         }
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             if(group==0) {
@@ -76,16 +77,16 @@ private fun VehicleControl.zone():String {
                                 basic.forEach { DirectControl(s,it) }
                                 TextButton(onClick={advanced=!advanced}) { Text(if(advanced)"추가 설정 접기" else "바람 방향 · 자동 공조 · 성에 제거") }
                                 if(advanced) extra.forEach { DirectControl(s,it) }
-                            } else controls.forEach { DirectControl(s,it) }
+                            } else controls.filter { it !in mapped }.forEach { DirectControl(s,it) }
                             if(controls.isEmpty()) Caption("지원하는 제어가 없습니다.")
                         }
                     } else Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        CabinPlan(s,temperatures,Modifier.fillMaxWidth())
+                        CabinPlan(s,mapped,Modifier.fillMaxWidth())
                         if(group==0) {
                             basic.forEach { DirectControl(s,it) }
                             TextButton(onClick={advanced=!advanced}) { Text(if(advanced)"추가 설정 접기" else "추가 공조 설정") }
                             if(advanced) extra.forEach { DirectControl(s,it) }
-                        } else controls.forEach { DirectControl(s,it) }
+                        } else controls.filter { it !in mapped }.forEach { DirectControl(s,it) }
                         if(controls.isEmpty()) Caption("지원하는 제어가 없습니다.")
                     }
                     HorizontalDivider(color=CampLine)
@@ -105,42 +106,15 @@ private fun VehicleControl.zone():String {
         }
     }
 }
-@Composable internal fun CabinPlan(s:CampSession,temperatures:List<VehicleControl>,modifier:Modifier) {
-    Column(modifier.clip(RoundedCornerShape(28.dp)).background(CampSurface).padding(16.dp),
-        verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-            Caption("CABIN TOP VIEW")
-            Caption("실내 ${s.reading.cabin.takeIf { s.fresh && s.reading.isFresh("실내 온도",s.now) }.fmt()}°C")
-        }
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            if(maxWidth>=680.dp && temperatures.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        temperatures.filterIndexed { i,_->i%2==0 }.forEach { DirectControl(s,it,true) }
-                    }
-                    Image(painterResource(R.drawable.cabin_top),"위에서 본 차량 실내",Modifier.width(260.dp).height(500.dp),contentScale=ContentScale.Fit)
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        temperatures.filterIndexed { i,_->i%2==1 }.forEach { DirectControl(s,it,true) }
-                    }
-                }
-            } else {
-                Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Image(painterResource(R.drawable.cabin_top),"위에서 본 차량 실내",Modifier.fillMaxWidth().height(260.dp),contentScale=ContentScale.Fit)
-                    temperatures.forEach { DirectControl(s,it,true) }
-                }
-            }
-        }
-        Caption("앞쪽 ↑    운전석 왼쪽 · 동승석 오른쪽")
-    }
-}
-@Composable private fun DirectControl(s:CampSession,c:VehicleControl,compact:Boolean=false) {
+@Composable internal fun DirectControl(s:CampSession,c:VehicleControl,compact:Boolean=false) {
     val scope=rememberCoroutineScope()
     val actual=s.current[c.id].takeIf { s.fresh && s.reading.isFresh(c.id,s.now) }
     val pending=s.awaiting(c.id)
     val enabled=actual!=null && s.canAdjust(c)
     val send:(Double)->Unit={value->scope.launch { s.applyDirect(c,value) }}
+    var sliderValue by remember(c.id,actual,enabled) { mutableStateOf<Double?>(null) }
     Panel(Modifier.fillMaxWidth(),emphasis=pending) {
-        Text(if(c.kind==ControlKind.TEMPERATURE)c.zone() else c.kind.title,style=MaterialTheme.typography.titleMedium)
+        Text(c.kind.title,style=MaterialTheme.typography.titleMedium)
         if(c.kind!=ControlKind.TEMPERATURE) Caption(c.zone())
         if(actual!=null) when {
             c.choices.isNotEmpty()->Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -152,7 +126,16 @@ private fun VehicleControl.zone():String {
                     modifier=Modifier.semantics { contentDescription="${c.kind.title} · ${c.zone()}" })
             }
             else-> {
-                Text(controlValue(c,actual),style=if(compact)MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium)
+                Text(controlValue(c,sliderValue?:actual),style=if(compact)MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
+                    color=CampInk)
+                if(c.kind==ControlKind.TEMPERATURE && c.max>c.min) {
+                    Slider(value=(sliderValue?:actual).toFloat(),onValueChange={sliderValue=it.toDouble()},
+                        onValueChangeFinished={sliderValue?.let { send(it) };sliderValue=null},
+                        enabled=enabled,valueRange=c.min.toFloat()..c.max.toFloat(),
+                        steps=((c.max-c.min)/c.step).toInt().minus(1).coerceIn(0,200),
+                        modifier=Modifier.heightIn(min=56.dp).semantics { contentDescription="${c.zone()} 목표 온도" })
+                    Caption(if(sliderValue!=null) "손을 떼면 전송해요" else "슬라이더나 버튼으로 조절해요")
+                }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     SecondaryAction("−",enabled && actual>c.min,Modifier.weight(1f).heightIn(min=64.dp).semantics { contentDescription="${c.kind.title} 낮추기 · ${c.zone()}" }) { send(actual-c.step) }
                     SecondaryAction("+",enabled && actual<c.max,Modifier.weight(1f).heightIn(min=64.dp).semantics { contentDescription="${c.kind.title} 높이기 · ${c.zone()}" }) { send(actual+c.step) }
