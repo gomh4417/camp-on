@@ -35,7 +35,8 @@ private val CampTypography=Typography(
 @Composable internal fun CampTheme(content:@Composable ()->Unit) {
     MaterialTheme(typography=CampTypography,colorScheme=darkColorScheme(
         primary=CampAccent,onPrimary=Color(0xFF192332),primaryContainer=Color(0xFF303F53),onPrimaryContainer=CampInk,
-        secondary=CampAccent,onSecondary=CampBackground,background=CampBackground,onBackground=CampInk,
+        secondary=CampAccent,onSecondary=CampBackground,secondaryContainer=Color(0xFF334459),onSecondaryContainer=CampInk,
+        background=CampBackground,onBackground=CampInk,
         surface=CampSurface,onSurface=CampInk,surfaceVariant=Color(0xFF2A3039),onSurfaceVariant=CampMuted,
         outline=CampLine,error=CampWarning,onError=CampBackground),content=content)
 }

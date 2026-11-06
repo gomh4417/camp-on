@@ -38,7 +38,7 @@ import java.util.Locale
 
 internal fun Double?.fmt()=this?.takeIf { it.isFinite() }?.let { String.format(Locale.KOREA,"%.1f",it) }?:"—"
 private fun stamp(t:Long)=if(t<=0) "수신 대기" else SimpleDateFormat("HH:mm",Locale.KOREA).format(Date(t))
-private fun controlValue(c:VehicleControl,v:Double?):String=when {
+internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     v==null->"확인 필요"
     c.choices.isNotEmpty()->c.choices[v]?:"확인 필요"
     c.kind in listOf(ControlKind.POWER,ControlKind.AC,ControlKind.RECIRCULATION,ControlKind.AUTO,ControlKind.DUAL,ControlKind.AIR_CLEANER,ControlKind.DEFROSTER)->if(v>0) "켜짐" else "꺼짐"
@@ -76,7 +76,8 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
     val scope=rememberCoroutineScope()
     var page by rememberSaveable { mutableIntStateOf(0) }
     var settings by rememberSaveable { mutableStateOf(false) }
-    var editor by rememberSaveable { mutableStateOf(false) }
+    var help by rememberSaveable { mutableStateOf(false) }
+    var editor by rememberSaveable { mutableIntStateOf(-1) }
     var confirm by rememberSaveable { mutableStateOf("") }
     var presetDialog by rememberSaveable { mutableStateOf(false) }
     val lifecycle=LocalLifecycleOwner.current.lifecycle
@@ -95,9 +96,10 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                     if(wide) {
                         Spacer(Modifier.weight(1f))
                         Caption(if(s.parkingState.allowsControl) "P  주차 중" else "차량 조작 잠김")
-                        Caption(if(s.fresh && s.connected) "차량 연결 정상" else "연결 확인")
+                        Caption(if(s.fresh && s.connected) "SDK 수신 중" else "연결 확인")
                     } else Spacer(Modifier.weight(1f))
                     Text("${s.soc.fmt()}%",style=MaterialTheme.typography.titleLarge)
+                    TextButton(onClick={help=true},modifier=Modifier.heightIn(min=56.dp)) { Text("사용법") }
                     TextButton(onClick={settings=true},modifier=Modifier.heightIn(min=56.dp)) {
                         Text(if(s.isDemo) "시연 · 설정" else "Pleos · 설정")
                     }
@@ -118,7 +120,7 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                         TextButton(onClick={s.message=""}) { Text("닫기") }
                     }
                     if(s.minimized) SleepScreen(s) else when(page) {
-                        0->Dashboard(s,wide,{confirm="start"},{editor=true},{presetDialog=true},{page=1},{page=3},{confirm="apply"})
+                        0->Dashboard(s,wide,{confirm="start"},{editor=it},{presetDialog=true},{page=1},{page=3},{confirm="apply"})
                         1->PlanScreen(s,wide,{page=3})
                         2->DepartureScreen(s,wide,{confirm="end"},{confirm="manual"},{page=1})
                         3->EnergyDetail(s) { page=1 }
@@ -132,7 +134,8 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
             }
         }
     }
-    if(editor) ControlEditor(s,{editor=false}) { editor=false;confirm="controls" }
+    if(help) PleosGuide { help=false }
+    if(editor>=0) ControlEditor(s,editor) { editor=-1 }
     if(presetDialog) PresetDialog(s) { presetDialog=false }
     if(settings) SettingsDialog(s,{settings=false},switchSource) { scenario->
         (s.source as? DemoVehicleSource)?.scenario(scenario)
@@ -180,7 +183,7 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(20.dp)) { right() }
     } else Column(verticalArrangement=Arrangement.spacedBy(20.dp)) { left();right() }
 }
-@Composable private fun Dashboard(s:CampSession,wide:Boolean,start:()->Unit,edit:()->Unit,presets:()->Unit,plan:()->Unit,detail:()->Unit,apply:()->Unit) {
+@Composable private fun Dashboard(s:CampSession,wide:Boolean,start:()->Unit,edit:(Int)->Unit,presets:()->Unit,plan:()->Unit,detail:()->Unit,apply:()->Unit) {
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {
         Column(Modifier.weight(1f)) {
             Caption("STAY A LITTLE LONGER")
@@ -190,8 +193,9 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
         else if(s.mode==CampMode.SLEEP) SecondaryAction("화면 최소화") { s.updateMinimized(true) }
     }
     Split(wide,left={
+        CabinPanel(s,edit,presets)
         Panel(Modifier.fillMaxWidth()) {
-            Caption("01  활동 모드")
+            Caption("ACTIVITY · 머무는 방식")
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 CampMode.visible.forEach { m->
                     OutlinedButton(onClick={s.selectMode(m)},enabled=!s.busy,
@@ -212,10 +216,9 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                 PrimaryAction("모드 적용",s.active && s.canControl,action=apply)
             }
         }
-        CabinPanel(s,edit,presets)
     },right={
         Panel(Modifier.fillMaxWidth(),emphasis=true) {
-            Caption("02  캠핑 에너지")
+            Caption("ENERGY · 남은 여유")
             Text("계획 후 여유",style=MaterialTheme.typography.titleLarge)
             Row(verticalAlignment=Alignment.Bottom) {
                 Text(s.budget?.margin.fmt(),style=MaterialTheme.typography.displayMedium)
@@ -240,9 +243,9 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
         }
     })
 }
-@Composable private fun CabinPanel(s:CampSession,edit:()->Unit,presets:()->Unit) {
+@Composable private fun CabinPanel(s:CampSession,edit:(Int)->Unit,presets:()->Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CampSurface)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1.95f)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(3.6f)) {
             Image(painterResource(R.drawable.cabin_clay),"흰색 클레이 스타일 SUV 실내",Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
             Row(Modifier.align(Alignment.BottomStart).padding(20.dp).clip(RoundedCornerShape(12.dp))
                 .background(CampBackground.copy(alpha=.92f)).padding(horizontal=18.dp,vertical=12.dp),
@@ -252,68 +255,29 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
             }
         }
         Column(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(20.dp)) {
-                listOf(ControlKind.TEMPERATURE,ControlKind.LIGHT,ControlKind.SEAT_POSITION).forEach { kind->
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                listOf(ControlKind.TEMPERATURE,ControlKind.LIGHT,ControlKind.SEAT_POSITION).forEachIndexed { index,kind->
                     val c=s.reading.controls.firstOrNull { it.kind==kind }
-                    Column(Modifier.weight(1f)) {
-                        Caption(kind.title)
-                        Text(c?.let { control->controlValue(control,s.current[control.id].takeIf { s.fresh && s.reading.isFresh(control.id,s.now) }) }?:"미지원",
-                            style=MaterialTheme.typography.titleLarge)
+                    Card(onClick={edit(index)},modifier=Modifier.weight(1f),shape=RoundedCornerShape(18.dp),
+                        colors=CardDefaults.cardColors(containerColor=CampBackground)) {
+                        Box(Modifier.fillMaxWidth().height(104.dp)) {
+                            Image(painterResource(if(index==2)R.drawable.cabin_top else R.drawable.cabin_clay),null,
+                                Modifier.fillMaxSize(),contentScale=ContentScale.Crop,
+                                colorFilter=if(index==1)androidx.compose.ui.graphics.ColorFilter.tint(CampAccent,androidx.compose.ui.graphics.BlendMode.Modulate) else null)
+                        }
+                        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Text(listOf("공조 조절","조명 조절","시트 조절")[index],style=MaterialTheme.typography.titleMedium)
+                            Caption(c?.let { control->controlValue(control,s.current[control.id].takeIf { s.fresh && s.reading.isFresh(control.id,s.now) }) }?:"미지원")
+                        }
                     }
                 }
             }
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                PrimaryAction("차량 환경 조절",s.fresh,Modifier.weight(1f),edit)
-                SecondaryAction("현재 설정 저장",s.fresh && !s.busy,Modifier.weight(1f),presets)
+                Caption("이미지 카드를 눌러 영역별로 조절하세요")
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick=presets,enabled=s.fresh && !s.busy) { Text("현재 설정 저장") }
             }
         }
-    }
-}
-@Composable private fun ControlEditor(s:CampSession,dismiss:()->Unit,apply:()->Unit) {
-    var group by rememberSaveable { mutableIntStateOf(0) }
-    Modal("차량 환경",dismiss) {
-        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            listOf("공조","조명","시트").forEachIndexed { i,label->
-                FilterChip(group==i,{group=i},label={Text(label)},modifier=Modifier.heightIn(min=56.dp))
-            }
-        }
-        if(group==2) Image(painterResource(R.drawable.cabin_top),"3열 SUV 시트 배치",
-            Modifier.fillMaxWidth().height(240.dp).clip(RoundedCornerShape(16.dp)),contentScale=ContentScale.Fit)
-        val controls=s.reading.controls.filter { c->when(group) {
-            1->c.kind in listOf(ControlKind.LIGHT,ControlKind.CABIN_LIGHT,ControlKind.READING_LIGHT)
-            2->c.kind in listOf(ControlKind.SEAT_POSITION,ControlKind.SEAT_TEMPERATURE)
-            else->c.kind in listOf(ControlKind.POWER,ControlKind.TEMPERATURE,ControlKind.FAN,ControlKind.AC,ControlKind.RECIRCULATION,ControlKind.AUTO,ControlKind.DUAL,ControlKind.AIR_CLEANER,ControlKind.FAN_DIRECTION,ControlKind.DEFROSTER)
-        } }
-        if(controls.isEmpty()) Caption("연결된 지원 항목이 없습니다.")
-        controls.forEach { c->
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text(c.label,style=MaterialTheme.typography.titleMedium)
-                Caption("현재 ${controlValue(c,s.current[c.id].takeIf { s.fresh })} · ${s.results[c.id]?:if(c.writable) "변경 가능" else "조회 전용"}")
-                if(c.writable) {
-                    val v=s.overrides[c.id]?:s.current[c.id]?:s.target(c)
-                    if(c.choices.isNotEmpty()) {
-                        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            c.choices.forEach { (value,label)->
-                                FilterChip(v==value,{s.setTarget(c,value)},label={Text(label)},enabled=!s.busy,modifier=Modifier.heightIn(min=56.dp))
-                            }
-                        }
-                    } else if(c.kind in listOf(ControlKind.POWER,ControlKind.AC,ControlKind.RECIRCULATION,ControlKind.AUTO,ControlKind.DUAL,ControlKind.AIR_CLEANER,ControlKind.DEFROSTER)) {
-                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                            Text("요청 ${controlValue(c,v)}",Modifier.weight(1f))
-                            Switch(v>0,{s.setTarget(c,if(it)1.0 else 0.0)},enabled=!s.busy)
-                        }
-                    } else Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                        SecondaryAction("−",!s.busy && v>c.min) { s.setTarget(c,v-c.step) }
-                        Text(controlValue(c,v),Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
-                        SecondaryAction("+",!s.busy && v<c.max) { s.setTarget(c,v+c.step) }
-                    }
-                }
-                HorizontalDivider(color=CampLine)
-            }
-        }
-        if(!s.isDemo && group==2) Caption("위치와 이동을 모두 지원하는 시트만 조절합니다. 이동 후 실제 위치를 확인합니다.")
-        PrimaryAction("변경 내용 확인",s.active && s.canControl && s.overrides.isNotEmpty(),Modifier.fillMaxWidth(),apply)
-        if(!s.active) Caption("캠핑을 시작한 뒤 적용할 수 있습니다.")
     }
 }
 @Composable private fun PresetDialog(s:CampSession,dismiss:()->Unit) {

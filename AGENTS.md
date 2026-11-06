@@ -1,7 +1,8 @@
 # CAMP:ON project rules
 
 - Preserve existing Kotlin / Compose versions and single app module.
-- Korean UI and reports. Restrained charcoal glass panels, accessible touch targets and system insets.
+- Korean UI and reports. Image-led cabin workspace: visual climate/light/seat entry cards and selectable seat regions, not a long text-only settings list. Restrained charcoal surfaces, accessible touch targets and system insets.
+- Keep current vehicle values distinct from pending edits. Pin the explicit apply action and its result outside scrolling content; never imply +/- has already actuated the vehicle.
 - Pretendard Regular, Medium, ExtraBold only. Avoid green-heavy multicolor styling.
 - Complete implementation before one final verification phase. Do not repeatedly build while editing.
 - Push completed work to https://github.com/gomh4417/camp-on.git; never publish local credentials or IDE caches.

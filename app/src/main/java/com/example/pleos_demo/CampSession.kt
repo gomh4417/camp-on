@@ -154,7 +154,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     fun edit(key:String,value:String) { fields[key]=value;edited[key]=now;changed();save() }
     fun selectMode(value:CampMode) { if(busy)return;selected=value;overrides.clear();save() }
     fun savePreset(p:Preset) { if(busy)return;presets[selected]=p;overrides.clear();changed();save() }
-    fun setTarget(c:VehicleControl,value:Double) { if(busy)return;overrides[c.id]=normalized(c,value);changed();save() }
+    fun setTarget(c:VehicleControl,value:Double) { if(busy)return;overrides[c.id]=normalized(c,value);results.remove(c.id);message="";changed();save() }
     fun checkItem(label:String,checked:Boolean) { checks[label]=checked;save() }
     fun updateMinimized(value:Boolean) { minimized=value;save() }
     fun namedPreset(name:String) {
@@ -272,6 +272,9 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
                 if(!canRestore(current[c.id],targets[c.id]?:Double.NaN)) results[c.id]="실패 · 최종 값 확인 필요"
             }
             val success=controls.isNotEmpty() && controls.all { results[it.id] in listOf("적용 확인","설정 유지") }
+            controls.filter { results[it.id] in listOf("적용 확인","설정 유지") }.forEach { c->
+                if(overrides[c.id]==targets[c.id]) overrides.remove(c.id)
+            }
             if(success && !onlyEdited) mode=selectedMode
             modeStatus=if(success) { if(onlyEdited) "개별 설정 적용" else "적용 완료" } else "일부 적용 · 확인 필요"
             message=modeStatus
