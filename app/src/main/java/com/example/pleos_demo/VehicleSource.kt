@@ -13,14 +13,17 @@ import kotlin.coroutines.resumeWithException
 
 enum class ControlKind(val title: String, val unit: String) {
     POWER("공조 전원",""), TEMPERATURE("목표 온도","°C"), FAN("풍량","단"),
-    AC("A/C",""), RECIRCULATION("내기순환",""), LIGHT("조명","")
+    AC("A/C",""), RECIRCULATION("내기순환",""), LIGHT("조명","%"), SEAT_TEMPERATURE("시트 열선·통풍","단"), SEAT_POSITION("시트 등받이","")
 }
 data class VehicleControl(val id: String, val label: String, val kind: ControlKind,
     val min: Double, val max: Double, val step: Double = 1.0, val writable: Boolean)
 data class VehicleReading(val soc: Double?=null, val charging: Boolean?=null,
     val cabin: Double?=null, val values: Map<String,Double> = emptyMap(),
     val controls: List<VehicleControl> = emptyList(), val errors: Map<String,String> = emptyMap(),
-    val time: Long=System.currentTimeMillis())
+    val time: Long=System.currentTimeMillis(), val source: String="Pleos SDK",
+    val observedAt: Map<String,Long> = emptyMap()) {
+    fun isFresh(id: String, now: Long) = now - (observedAt[id] ?: time) in 0 until 30_000
+}
 data class ParkingState(val parked: Boolean?, val unrestricted: Boolean?, val time: Long=System.currentTimeMillis()) {
     val allowsControl get() = parked == true && unrestricted == true && System.currentTimeMillis()-time < 10_000
 }
@@ -47,6 +50,7 @@ class PleosVehicleSource(context: Context) : VehicleSource {
     private data class Binding(val control: VehicleControl, val read: suspend ()->Double?, val write: suspend (Double)->Unit)
     private val bindings=linkedMapOf<String,Binding>()
     private var discovered=false
+    private var discoveredAt=0L
     private var cabinArea: SeatArea?=null
     private val capabilityErrors=linkedMapOf<String,String>()
     private fun areaName(area: SeatArea) = area.values.joinToString("+") { it.name }
@@ -115,6 +119,33 @@ class PleosVehicleSource(context: Context) : VehicleSource {
                     write={ value -> response<Unit> { ok,fail -> light.setAmbientLightBrightness(area,value.toInt(),{ _,_->ok(Unit) },fail) } })
             }
         }
+        attempt("시트 열선·통풍") {
+            val seat=vehicle.getSeat()
+            val (config,areas)=response<Pair<CapabilityConfig,Map<SeatArea,AreaBounds<Int>>>> { ok,fail ->
+                seat.checkSeatTemperatureCapabilities({ c,a->ok(c to a) },fail)
+            }
+            areas.forEach { (area,bounds) ->
+                bind(ControlKind.SEAT_TEMPERATURE,area,config,bounds.minValue.toDouble(),bounds.maxValue.toDouble(),
+                    read={ response<Int?> { ok,fail->seat.getHvacSeatTemperature(area,ok,fail) }?.toDouble() },
+                    write={ value->response<Unit> { ok,fail->seat.setHvacSeatTemperature(area,value.toInt(),{ _,_->ok(Unit) },fail) } })
+            }
+        }
+        // SDK exposes movement commands, not an absolute position setter. Do not simulate a rest position.
+        attempt("시트 위치") {
+            val seat=vehicle.getSeat()
+            val (config,areas)=response<Pair<CapabilityConfig,Map<SeatArea,AreaBounds<Int>>>> { ok,fail ->
+                seat.checkSeatBackrestAnglePositionCapabilities({ c,a->ok(c to a) },fail)
+            }
+            areas.forEach { (area,bounds) ->
+                if(config.readable()) {
+                    val id=ControlKind.SEAT_POSITION.name+":"+areaName(area)
+                    bindings[id]=Binding(VehicleControl(id,"시트 등받이 · "+areaLabel(area),ControlKind.SEAT_POSITION,
+                        bounds.minValue.toDouble(),bounds.maxValue.toDouble(),writable=false),
+                        read={ response<Int?> { ok,fail->seat.getCurrentSeatBackrestAnglePosition(area,ok,fail) }?.toDouble() },
+                        write={ error("위치 복원 미지원") })
+                }
+            }
+        }
         attempt("실내 온도") {
             val (config,areas)=response<Pair<CapabilityConfig,List<SeatArea>>> { ok,fail ->
                 hvac.checkHvacTemperatureCurrentCapabilities({ c,a->ok(c to a) },fail)
@@ -122,13 +153,15 @@ class PleosVehicleSource(context: Context) : VehicleSource {
             cabinArea=areas.firstOrNull().takeIf { config.readable() }
         }
         discovered=bindings.isNotEmpty()
+        discoveredAt=System.currentTimeMillis()
     }
     override suspend fun read(): VehicleReading {
-        if(!discovered) discover()
+        if(!discovered || System.currentTimeMillis()-discoveredAt>60_000) discover()
         return coroutineScope {
             val errors=capabilityErrors.toMutableMap()
+            val observedAt=mutableMapOf<String,Long>()
             suspend fun <T> readValue(name:String,block:suspend ()->T):T? =
-                try { block() } catch(e:TimeoutCancellationException) { errors[name]="응답 시간 초과";null }
+                try { block().also { if(it!=null) observedAt[name]=System.currentTimeMillis() } } catch(e:TimeoutCancellationException) { errors[name]="응답 시간 초과";null }
                 catch(e:CancellationException) { throw e }
                 catch(e:Exception) { errors[name]=e.message ?: "조회 실패";null }
             val soc=async {
@@ -152,7 +185,7 @@ class PleosVehicleSource(context: Context) : VehicleSource {
             } }
             val values=bindings.values.map { b->async { b.control.id to readValue(b.control.id) { b.read() } } }.awaitAll()
                 .mapNotNull { (id,value)->value?.takeIf { it.isFinite() }?.let { id to it } }.toMap()
-            VehicleReading(soc.await(),charging.await(),cabin.await(),values,bindings.values.map { it.control },errors)
+            VehicleReading(soc.await(),charging.await(),cabin.await(),values,bindings.values.map { it.control },errors,observedAt=observedAt)
         }
     }
     override suspend fun parking() = gate.read()
@@ -162,6 +195,8 @@ class PleosVehicleSource(context: Context) : VehicleSource {
         val binding=bindings[id] ?: error("지원하지 않는 기능")
         check(binding.control.writable) { "읽기 전용 기능" }
         require(value.isFinite() && value in binding.control.min..binding.control.max) { "지원 범위를 벗어난 값" }
+        val steps=(value-binding.control.min)/binding.control.step
+        require(kotlin.math.abs(steps-kotlin.math.round(steps))<0.001) { "지원 증분 확인 필요" }
         binding.write(value)
     }
     override fun close() { gate.close(); vehicle.release() }

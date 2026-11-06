@@ -48,7 +48,7 @@ class CampSessionTest {
             assertEquals(2,s.written.size) // Failed IPC remains unresolved until read-back.
             val restored=CampSession(context,vehicle,name)
             assertTrue(restored.active)
-            assertEquals(CampMode.COOK,restored.mode)
+            assertEquals(CampMode.RELAX,restored.mode) // A partial application does not change the confirmed mode.
             restored.refresh()
             vehicle.values["temperature"]=26.0
             restored.restore()
@@ -75,7 +75,7 @@ class CampSessionTest {
             restored.selected=CampMode.MOVIE
             restored.savePreset(Preset(25.0,15))
             val again=CampSession(context,vehicle,name)
-            assertEquals(2,again.equipment().size)
+            assertEquals(3,again.equipment().size)
             assertEquals(300.0,again.equipment().last().watts,0.0)
             assertEquals(Preset(25.0,15),again.presets[CampMode.MOVIE])
         } finally { context.getSharedPreferences(name,0).edit().clear().commit() }

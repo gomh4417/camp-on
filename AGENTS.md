@@ -7,7 +7,7 @@
 - Push completed work to https://github.com/gomh4417/camp-on.git; never publish local credentials or IDE caches.
 - Consult official Android and Pleos documentation before API changes; never invent APIs or permissions.
 - Vehicle reads and writes have separate capabilities. Unknown parking / restrictions / stale state blocks control.
-- UI uses connected Pleos values only. Connection errors never silently substitute data. Keep user-facing copy concise; no repeated test-environment disclaimers.
+- Actual Pleos mode uses connected values only; connection errors never substitute data. Competition demo mode explicitly uses assumed data and separate persisted state. Keep user-facing copy concise; show the demo source once, not repeated disclaimers.
 - Missing values stay unknown. Every observation retains source and timestamp.
 - One shared camping session. Persist presets, initial values, changed values and unresolved restore results.
 - Restore only app-changed values still matching last app writes; manual changes require review.

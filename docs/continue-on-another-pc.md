@@ -30,13 +30,14 @@ Windows·Intel 호환 이미지는 공식 배포 목록에서 확인하세요.
 Pleos SDK Maven 주소는 settings.gradle.kts에 들어 있습니다.
 계정 승인이나 저장소 접근 문제가 생기면 새 PC의 Pleos 접근 권한을 확인하세요.
 
-## 이어서 할 작업
-[실행 기록과 남은 작업](camp-on-verification.md)을 먼저 읽으세요.
-최우선은 Virtual Console / DDS bridge 활성 상태에서 SDK 공조 쓰기 반영 확인입니다.
-현재 코드 빌드와 자동 테스트는 통과했습니다. 에뮬레이터 쓰기 성공은 아직 확인하지 못했습니다.
+## 현재 상태
+[작업 기록](camp-on-verification.md)을 먼저 읽으세요.
+개인 공모전용 시연 모드가 기본입니다. AI 생성 차량 이미지와 새 PDF 명세 기반 화면·기능이 포함됩니다.
+이번 변경은 사용자 요청으로 빌드·테스트·시각 검증을 실행하지 않았습니다.
+실제 Pleos 공조 쓰기/DDS bridge 문제는 해결 확인되지 않았습니다.
 
 새 대화에 아래 내용을 붙여 넣으면 됩니다:
-> CAMP:ON 작업을 이어서 진행해줘. AGENTS.md, docs/camp-on-spec.md, docs/camp-on-verification.md를 먼저 읽어줘. UI는 Pretendard Regular/Medium/ExtraBold와 차콜 글래스 스타일을 유지해. Pleos Virtual Console의 DDS bridge 활성 상태를 확인하고 SDK 공조 제어가 실제 에뮬레이터에 반영되도록 남은 문제를 해결해. 모든 코드 수정 후 마지막에 검증해.
+> CAMP:ON 작업을 이어서 진행해줘. AGENTS.md, docs/camp-on-spec.md, docs/camp-on-verification.md를 먼저 읽어줘. 개인 공모전용 더미 시연과 실제 Pleos 연결을 구분해. Pretendard를 유지하고 새 PDF 기반 3화면 구조를 따라줘. 검증 범위는 내 최신 요청을 따라줘.
 
 ## 옮겨지지 않는 것
 에뮬레이터 앱 데이터·진행 중 세션·IDE 로컬 설정·현재 대화 기록·개인 설치 스킬·인증 정보는 Git으로 옮겨지지 않습니다.

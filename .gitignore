@@ -1,6 +1,6 @@
 /.idea/
 /.kotlin/
-/graphify-out/
+**/graphify-out/
 **/build/
 *.jks
 *.keystore
