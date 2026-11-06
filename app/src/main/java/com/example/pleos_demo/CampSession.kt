@@ -15,10 +15,10 @@ import kotlin.math.abs
 import kotlin.math.round
 
 enum class CampMode(val label:String,val subtitle:String,val temperature:Double,val light:Int,val fan:Int,val kw:Double) {
-    COOK("요리","함께 만드는 저녁",23.0,80,2,0.65),
-    RELAX("휴식","아무것도 하지 않아도 좋은 시간",23.0,40,2,0.50),
-    SLEEP("취침","편안한 밤, 내일의 여유",22.0,0,1,0.40),
-    MOVIE("영화","이전 프리셋",22.0,10,1,0.55);
+    COOK("요리 모드","함께 만드는 저녁",23.0,80,2,0.65),
+    RELAX("휴식 모드","아무것도 하지 않아도 좋은 시간",23.0,40,2,0.50),
+    SLEEP("취침 모드","편안한 밤, 내일의 여유",22.0,0,1,0.40),
+    MOVIE("영화 모드","이전 프리셋",22.0,10,1,0.55);
     companion object { val visible = listOf(COOK, RELAX, SLEEP) }
 }
 data class Preset(val temperature:Double,val light:Int,val fan:Int=2,val power:Boolean=true,
@@ -147,9 +147,11 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
             e.copy(hours=if(e.hours.isFinite() && e.hours>=0) minOf((e.hours-elapsed).coerceAtLeast(0.0),hours) else Double.NaN)
         }
     }
-    fun addEquipment() {
+    fun addEquipment(preset:Equipment=Equipment("새 장비",100.0,1.0)) {
         val id="_"+System.nanoTime();equipmentIds.add(id)
-        mapOf("name" to "새 장비","watts" to "100","hours" to "1","quantity" to "1","duty" to "1").forEach { (k,v)->fields[k+id]=v;edited[k+id]=now }
+        mapOf("name" to preset.name,"watts" to preset.watts.toString(),"hours" to preset.hours.toString(),
+            "quantity" to preset.quantity.toString(),"duty" to preset.duty.toString(),"equipmentSource" to "종류별 가정값")
+            .forEach { (k,v)->fields[k+id]=v;edited[k+id]=now }
         changed();save()
     }
     fun removeEquipment(id:String) { equipmentIds.remove(id);changed();save() }

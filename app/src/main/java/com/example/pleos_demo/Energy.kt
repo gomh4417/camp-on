@@ -9,7 +9,22 @@ data class Budget(val current: Double, val home: Double, val reserve: Double, va
     val arrival get() = (departure - home).coerceAtLeast(0.0)
     val continuedShortfall get() = (home + reserve + consumption - current).coerceAtLeast(0.0)
 }
+data class ForecastPoint(val hours: Double, val kwh: Double)
 object Energy {
+    /** Equipment starts now and stops after its remaining duration; vehicle load stays constant. */
+    fun forecast(capacity: Double?, soc: Double?, hours: Double?, vehicleKw: Double?,
+        equipment: List<Equipment>): List<ForecastPoint>? {
+        if (listOf(capacity,soc,hours,vehicleKw).any { it==null || !it.isFinite() || it<0 }) return null
+        if (capacity!!<=0 || soc!!>100 || equipmentKwh(equipment)==null) return null
+        val duration=hours!!
+        val times=(listOf(0.0,duration)+equipment.map { it.hours.coerceIn(0.0,duration) }+
+            (0..24).map { duration*it/24 }).distinct().sorted()
+        return times.map { t->
+            val consumed=vehicleKw!!*t+equipmentKwh(equipment,t)!!/.9
+            if(!consumed.isFinite()) return null
+            ForecastPoint(t,(capacity*soc/100-consumed).coerceAtLeast(0.0))
+        }
+    }
     fun equipmentKwh(equipment: List<Equipment>, remainingHours: Double = Double.MAX_VALUE): Double? {
         if (!remainingHours.isFinite() || remainingHours < 0) return null
         if (equipment.any { !it.watts.isFinite() || !it.hours.isFinite() || !it.duty.isFinite() ||

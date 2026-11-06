@@ -23,8 +23,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-private data class CabinSeat(val area:String,val label:String,val x:Float,val y:Float,val width:Float=.29f)
-private val cabinSeats=listOf(
+internal data class CabinSeat(val area:String,val label:String,val x:Float,val y:Float,val width:Float=.29f)
+internal val cabinSeats=listOf(
     CabinSeat("ROW_1_LEFT","운전석",.18f,.35f),
     CabinSeat("ROW_1_RIGHT","동승석",.53f,.35f),
     CabinSeat("ROW_2_LEFT","2열 왼쪽",.16f,.56f,.23f),

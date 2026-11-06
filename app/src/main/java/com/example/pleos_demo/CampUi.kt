@@ -77,6 +77,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     val scope=rememberCoroutineScope()
     val context=LocalContext.current
     val journey=remember { JourneySession(context) }
+    HomeRouteSync(s)
     var page by rememberSaveable { mutableIntStateOf(if(journey.camping || s.active) 0 else 4) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var help by rememberSaveable { mutableStateOf(false) }
@@ -149,16 +150,11 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     }
     if(confirm.isNotEmpty()) {
         val kind=confirm
-        Modal(if(kind=="controls") "차량 설정 적용" else if(kind=="apply") "${s.selected.label} 모드 적용" else if(kind=="start") "캠핑을 시작할까요?" else if(kind=="manual") "직접 복원 확인" else "캠핑 종료·복원",
+        Modal(if(kind=="controls") "차량 설정 적용" else if(kind=="apply") "${s.selected.label} 적용" else if(kind=="start") "캠핑을 시작할까요?" else if(kind=="manual") "직접 복원 확인" else "캠핑 종료·복원",
             {confirm=""}) {
             when(kind) {
                 "apply","controls"->{
-                    Caption("현재값 → 요청값")
-                    s.plannedControls.filter { kind!="controls" || it.id in s.overrides }.forEach { c->
-                        LabelValue(c.label,"${controlValue(c,s.current[c.id])} → ${controlValue(c,s.target(c))}")
-                    }
-                    Caption("변경 후 남은 소비 예상 ${s.previewBudget?.consumption.fmt()} kWh · 추정")
-                    Caption("항목별 차량 응답을 확인한 뒤 결과를 표시합니다.")
+                    ModeApplyPreview(s,onlyEdited=kind=="controls")
                 }
                 "start"->{ Text("진입 전 차량 설정을 저장합니다.");Caption("종료 예정 ${s.fields["end"]}") }
                 "manual"->Text("차량에서 남은 설정을 직접 복원했거나, 현재 설정 유지 여부를 확인했나요?")
@@ -209,6 +205,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                         colors=ButtonDefaults.outlinedButtonColors(containerColor=if(s.selected==m) CampAccent else Color.Transparent,
                             contentColor=if(s.selected==m) CampBackground else CampInk)) {
                         Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                            ModeArt(m,Modifier.size(88.dp))
                             Text(m.label,style=MaterialTheme.typography.titleLarge)
                         }
                     }
@@ -233,6 +230,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
             Allocation(s.budget)
             LabelValue("캠핑 가용",s.budget?.available.fmt()+" kWh")
             LabelValue("남은 사용 계획",s.budget?.consumption.fmt()+" kWh")
+            BatteryForecast(s)
             HorizontalDivider(color=CampLine)
             LabelValue("종료 예정",s.fields["end"].orEmpty().takeLast(5))
             LabelValue("남은 시간",s.remainingHours.fmt()+" h")
@@ -302,27 +300,12 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
         }
         Panel(Modifier.fillMaxWidth()) {
             Caption("02  외부 장비")
-            s.equipmentIds.toList().forEach { id->
-                Field(s,"name$id","장비 이름")
-                Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Field(s,"watts$id","전력 · W",Modifier.weight(1f),valid=validNumber(s,"watts$id"))
-                    Field(s,"hours$id","사용 · h",Modifier.weight(1f),valid=validNumber(s,"hours$id"))
-                    Field(s,"quantity$id","수량",Modifier.weight(1f),valid=validNumber(s,"quantity$id",true))
-                }
-                if((s.number("duty$id")?:1.0)!=1.0) Field(s,"duty$id","사용률 · 0~1",valid=(s.number("duty$id")?:-1.0) in 0.0..1.0)
-                TextButton(onClick={s.removeEquipment(id)}) { Text("장비 삭제") }
-                HorizontalDivider(color=CampLine)
-            }
-            SecondaryAction("+ 장비 추가",modifier=Modifier.fillMaxWidth()) { s.addEquipment() }
+            EquipmentPicker(s)
             Caption("입력 시간은 앞으로 사용할 시간입니다. 종료 예정 시각까지의 소비만 합산합니다.")
         }
         Panel(Modifier.fillMaxWidth()) {
             Caption("03  귀가 조건")
-            Field(s,"destination","귀가 목적지")
-            Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                Field(s,"distance","거리 · km",Modifier.weight(1f),valid=validNumber(s,"distance"))
-                Field(s,"efficiency","전비 · km/kWh",Modifier.weight(1f),valid=validNumber(s,"efficiency",positive=true))
-            }
+            HomeRouteSettings(s)
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Field(s,"capacity","용량 보정 · kWh (비우면 차량값)",Modifier.weight(1f),valid=s.fields["capacity"].isNullOrBlank() || validNumber(s,"capacity",positive=true))
                 Field(s,"reserve","보호 예비량 · kWh",Modifier.weight(1f),valid=validNumber(s,"reserve"))
@@ -334,6 +317,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
         Panel(Modifier.fillMaxWidth(),emphasis=true) {
             Text("남은 소비 예상",style=MaterialTheme.typography.titleLarge)
             Text(s.budget?.consumption.fmt()+" kWh",style=MaterialTheme.typography.displaySmall)
+            BatteryForecast(s)
             LabelValue("외부 장비",s.externalKwh.fmt()+" kWh")
             LabelValue("차량 공조",s.climateKwh.fmt()+" kWh")
             LabelValue("기본 부하",s.baseKwh.fmt()+" kWh")
@@ -446,6 +430,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
 }
 @Composable private fun SleepScreen(s:CampSession) {
     Column(Modifier.fillMaxWidth().padding(vertical=64.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(24.dp)) {
+        ModeArt(CampMode.SLEEP,Modifier.size(180.dp))
         Caption("SLEEP · 취침 중")
         Text(s.soc.fmt()+"%",style=MaterialTheme.typography.displayLarge)
         Text("편안한 밤 되세요",style=MaterialTheme.typography.headlineLarge)

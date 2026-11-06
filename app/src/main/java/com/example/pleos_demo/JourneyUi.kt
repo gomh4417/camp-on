@@ -56,20 +56,17 @@ import org.json.JSONObject
     var memo by rememberSaveable { mutableStateOf("") }
     val vehicle=j.vehicles.firstOrNull { it.optString("id")==selected }?:j.myVehicle
     BackHandler(screen!=0) { screen=0 }
-    val openOriginal:()->Unit={
-        try { context.startActivity(Intent().setClassName("com.anchor.pleosvoice","com.anchor.pleosvoice.GroupDriveActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch(_:android.content.ActivityNotFoundException) { j.message="MVP_C 차량 앱 설치가 필요해요" }
-        catch(_:SecurityException) { j.message="지도 앱을 열 수 없어요" }
-    }
+    val openMap:()->Unit={screen=3}
     if(screen!=0) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
         FilledTonalIconButton(onClick={screen=0},modifier=Modifier.size(56.dp)) { Text("×") }
         Spacer(Modifier.width(20.dp))
-        Text(if(screen==1)"그룹 차량" else "그룹 브리핑",Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium)
+        Text(if(screen==1)"그룹 차량" else if(screen==3)"위치·경로" else "그룹 브리핑",Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium)
         if(screen==2) SecondaryAction("메모 남기기") { composing=true }
     }
     if(!j.fresh) Caption(j.error.ifBlank { "그룹 정보를 불러오고 있어요" })
     if(j.message.isNotBlank()) Text(j.message,color=CampAccent)
     when(screen) {
+        3->IntegratedJourneyMap(j,s,true) { screen=0 }
         0->{
             val left:@Composable ColumnScope.()->Unit={
                 Row(Modifier.fillMaxWidth().padding(vertical=22.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -89,8 +86,8 @@ import org.json.JSONObject
             }
             if(wide) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(28.dp)) {
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(24.dp),content=left)
-                Column(Modifier.weight(1.05f)) { JourneyMap(openOriginal) }
-            } else { Column(verticalArrangement=Arrangement.spacedBy(24.dp),content=left);JourneyMap(openOriginal) }
+                Column(Modifier.weight(1.05f)) { IntegratedJourneyMap(j,s,false,openMap) }
+            } else { Column(verticalArrangement=Arrangement.spacedBy(24.dp),content=left);IntegratedJourneyMap(j,s,false,openMap) }
             Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                 TextButton(onClick={connection=true}) { Text("그룹 연결") }
                 PrimaryAction("도착 · 캠핑으로",j.arrived && s.parkingState.allowsControl && !s.busy) { if(j.enterCamp(s))onArrived() }
@@ -158,7 +155,7 @@ import org.json.JSONObject
     if(composing) AlertDialog(onDismissRequest={composing=false},title={Text("그룹 메모")},text={
         OutlinedTextField(memo,{memo=it.take(500)},label={Text("가는 길의 소식·구매 요청")})
     },confirmButton={TextButton(onClick={scope.launch { if(j.memo(memo)){memo="";composing=false} }},enabled=j.editable&&memo.isNotBlank()) { Text("보내기") }},
-        dismissButton={TextButton(onClick=openOriginal) { Text("음성 앱 열기") }})
+        dismissButton={TextButton(onClick={composing=false}) { Text("닫기") }})
     if(connection) AlertDialog(onDismissRequest={connection=false},title={Text("그룹 연결")},text={
         Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(address,{address=it},label={Text("공유 서버 주소")})

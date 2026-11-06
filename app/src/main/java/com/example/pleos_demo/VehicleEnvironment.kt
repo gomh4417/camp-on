@@ -128,12 +128,14 @@ private fun VehicleControl.zone():String {
             else-> {
                 Text(controlValue(c,sliderValue?:actual),style=if(compact)MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
                     color=CampInk)
-                if(c.kind==ControlKind.TEMPERATURE && c.max>c.min) {
+                if(c.kind in listOf(ControlKind.LIGHT,ControlKind.SEAT_POSITION,ControlKind.SEAT_TEMPERATURE))
+                    ControlIllustration(c,sliderValue?:actual)
+                if(c.kind in listOf(ControlKind.TEMPERATURE,ControlKind.LIGHT,ControlKind.SEAT_POSITION,ControlKind.SEAT_TEMPERATURE,ControlKind.FAN) && c.max>c.min) {
                     Slider(value=(sliderValue?:actual).toFloat(),onValueChange={sliderValue=it.toDouble()},
                         onValueChangeFinished={sliderValue?.let { send(it) };sliderValue=null},
                         enabled=enabled,valueRange=c.min.toFloat()..c.max.toFloat(),
                         steps=((c.max-c.min)/c.step).toInt().minus(1).coerceIn(0,200),
-                        modifier=Modifier.heightIn(min=56.dp).semantics { contentDescription="${c.zone()} 목표 온도" })
+                        modifier=Modifier.heightIn(min=56.dp).semantics { contentDescription="${c.zone()} ${c.kind.title}" })
                     Caption(if(sliderValue!=null) "손을 떼면 전송해요" else "슬라이더나 버튼으로 조절해요")
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {

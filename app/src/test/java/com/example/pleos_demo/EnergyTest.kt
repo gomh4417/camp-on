@@ -37,6 +37,20 @@ class EnergyTest {
         assertNull(budget(efficiency=Double.NaN)); assertNull(budget(reserve=Double.POSITIVE_INFINITY))
         assertNull(budget(equipment=listOf(Equipment("bad",100.0,1.0,50.0))))
     }
+    @Test fun forecastStopsEquipmentAtItsDuration() {
+        val points=Energy.forecast(100.0,50.0,4.0,1.0,listOf(Equipment("heater",900.0,1.0)))!!
+        assertEquals(50.0,points.first().kwh,.001)
+        assertEquals(48.0,points.first { it.hours==1.0 }.kwh,.001)
+        assertEquals(45.0,points.last().kwh,.001)
+        val b=Energy.calculate(100.0,50.0,0.0,5.0,0.0,4.0,listOf(Equipment("heater",900.0,1.0)))!!
+        assertEquals(b.departure,points.last().kwh,.001)
+    }
+    @Test fun forecastRejectsUnknownAndClampsEmptyBattery() {
+        assertNull(Energy.forecast(null,50.0,1.0,1.0,emptyList()))
+        assertNull(Energy.forecast(100.0,101.0,1.0,1.0,emptyList()))
+        assertNull(Energy.forecast(100.0,50.0,1.0,Double.NaN,emptyList()))
+        assertEquals(0.0,Energy.forecast(10.0,10.0,4.0,2.0,emptyList())!!.last().kwh,0.0)
+    }
     @Test fun preserveManualChange() {
         assertTrue(canRestore(22,22)); assertFalse(canRestore(26,22))
         assertFalse(canRestore(null,null)); assertFalse(canRestore(22,null))
