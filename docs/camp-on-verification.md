@@ -1,5 +1,35 @@
 # 실행 기록 / 작업 재개 지점
 
+## 2026-11-06 — 후속 실제 Pleos SDK 제어
+
+최신 기록. 아래의 과거 '미해결/검증 생략' 기록은 당시 상태다.
+
+- 실제 Pleos 모드 기본값. 기존 시연 선택 및 분리 저장소는 유지.
+- SDK 2.3.2 공식 소스와 Pleos/Android 문서 재검토. 자동 공조, 좌우 온도 연동, 공기 청정, 바람 방향, 성에 제거, 실내등, 독서등 추가.
+- 등받이 위치 조회+이동 capability 조합 시 피드백 이동. 실제 위치 변경은 명시적 편집만 대상. 모든 시트/옵션의 기기 동작을 확인한 것은 아니다.
+- 개별 편집은 편집 항목만 쓰기. 전체 적용 후 최종 조회값 재검사. 지원 선택값 검증.
+- CONTROL_CAR_LIGHTS, CAR_INFO 권한 추가. Android INFO_EV_BATTERY_CAPACITY / 1000으로 공칭 사용 가능 kWh 조회. 사용자 보정 우선, 신차 기준을 표시.
+- 기존 minimized 프로퍼티 setter와 setMinimized 함수의 JVM 이름 충돌 수정.
+
+환경 원인/실기 확인:
+- Pleos_Connect_v2.1.0, emulator-5554에 설치·실행.
+- 브라우저에서 http://127.0.0.1:8088/ 을 실제 열자 browser.active=true, emulator_active=true로 전환.
+- 이전 비활성 상태에서는 HVAC_TEMPERATURE_SET이 PropertyNotAvailableException으로 실패했다.
+- 활성화 뒤 SDK 조회 온도 22°C. 앱 RELAX 적용 후 양쪽 23°C, 풍량 2단, 조명 40%, 적용 완료 확인.
+- /vehicle/state에서 fan_speed=2, ambient brightness_pct=40, source=subscription 확인. HTTP는 관측만 사용했다.
+- 종료·복원 뒤 앱에서 온도 22°C, 조명 70%, 캠핑 준비 확인. 조명 70은 콘솔 활성화 전 세션 진입값.
+- 최종 화면에서 실제 SOC 100%, 실내 19.1°C, 에너지 계획 수치 표시. 콘솔과 앱을 켜둠.
+- assembleDebug / testDebugUnitTest / connectedDebugAndroidTest 성공. JVM 8개, 기기 4개 통과.
+- 개별 편집이 다른 모드 기본값을 쓰지 않는 회귀 테스트 추가.
+- Graphify 로컬 AST 갱신. 부분 Kotlin 파싱 한계는 유지.
+
+남은 범위:
+- 추가된 모든 옵션/시트 이동의 실기 조합 검증, 강제 종료 중 시트 STOP 전달 보장은 미확인.
+- 공칭 용량은 노화 반영 현재 용량이 아니다. 배터리 SOC·실내 온도는 읽기 전용.
+- Virtual Console 탭을 닫으면 시뮬레이션이 다시 비활성화될 수 있다.
+- CAMP FLOW 실제 Intent 계약은 여전히 미제공.
+
+
 ## 2026-11-06 — 새 PDF 명세 / 개인 공모전 시연
 
 후속 사용자 지시: 더미 데이터와 일반적 가정 허용. 별도 검증 불필요.

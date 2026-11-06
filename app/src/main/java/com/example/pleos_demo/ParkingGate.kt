@@ -28,5 +28,12 @@ class ParkingGate(context: Context) {
         val unrestricted=runCatching { restrictions?.currentCarUxRestrictions?.let { !it.isRequiresDistractionOptimization } }.getOrNull()
         ParkingState(parked,unrestricted)
     }
+    suspend fun nominalCapacityKwh():Double?=withContext(Dispatchers.IO) {
+        runCatching {
+            properties?.getProperty(Float::class.javaObjectType,VehiclePropertyIds.INFO_EV_BATTERY_CAPACITY,0)?.let {
+                if(it.status==CarPropertyValue.STATUS_AVAILABLE) it.value.toDouble().takeIf { v->v.isFinite() && v>0 }?.div(1000.0) else null
+            }
+        }.getOrNull()
+    }
     fun close() { properties=null;restrictions=null;car?.disconnect() }
 }

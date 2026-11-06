@@ -62,6 +62,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     val isDemo get()=source is DemoVehicleSource
     val fresh get()=reading.time>0 && now-reading.time in 0 until 30_000
     val canControl get()=fresh && connected && parkingState.allowsControl && !busy && !refreshing
+    val capacityKwh get()=if(fields["capacity"].isNullOrBlank()) reading.nominalCapacityKwh.takeIf { fresh && reading.isFresh("차량 공칭 용량",now) } else number("capacity")
     val soc get()=reading.soc.takeIf { fresh && reading.isFresh("배터리",now) }
     val current get()=reading.values
     val connected get()=reading.time>0 && connectionError.isEmpty()
@@ -89,13 +90,13 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     val budget get()=calculateBudget(climateKwh)
     val previewBudget get():Budget? {
         val planned=current.toMutableMap()
-        reading.controls.filter { it.writable }.forEach { planned[it.id]=target(it) }
+        plannedControls.forEach { planned[it.id]=target(it) }
         val kw=climateEstimate(planned) ?: return null
         return calculateBudget(remainingHours?.times(kw))
     }
     private fun calculateBudget(climate:Double?):Budget? {
         val base=baseKwh ?: return null
-        return Energy.calculate(number("capacity"),soc,number("distance"),number("efficiency"),number("reserve"),
+        return Energy.calculate(capacityKwh,soc,number("distance"),number("efficiency"),number("reserve"),
             climate?.plus(base),remainingEquipment())
     }
     init {
@@ -155,7 +156,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     fun savePreset(p:Preset) { if(busy)return;presets[selected]=p;overrides.clear();changed();save() }
     fun setTarget(c:VehicleControl,value:Double) { if(busy)return;overrides[c.id]=normalized(c,value);changed();save() }
     fun checkItem(label:String,checked:Boolean) { checks[label]=checked;save() }
-    fun setMinimized(value:Boolean) { minimized=value;save() }
+    fun updateMinimized(value:Boolean) { minimized=value;save() }
     fun namedPreset(name:String) {
         val clean=name.trim().take(30)
         if(clean.isEmpty() || !fresh || busy) return
@@ -167,6 +168,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     }
     fun loadPreset(p:NamedPreset) { if(busy)return;selected=p.mode;presets[selected]=p.preset;overrides.clear();overrides.putAll(p.values);changed();save() }
     fun deletePreset(p:NamedPreset) { namedPresets.remove(p);save() }
+    val plannedControls get()=reading.controls.filter { it.writable && (it.presetManaged || it.id in overrides) }
     fun target(c:VehicleControl,p:Preset=presets.getValue(selected)):Double=normalized(c,overrides[c.id]?:when(c.kind) {
         ControlKind.POWER->if(p.power) 1.0 else 0.0
         ControlKind.TEMPERATURE->p.temperature
@@ -175,9 +177,11 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         ControlKind.RECIRCULATION->if(p.recirculate) 1.0 else 0.0
         ControlKind.LIGHT->c.min+(c.max-c.min)*p.light/100.0
         ControlKind.SEAT_TEMPERATURE->p.seatTemperature.toDouble()
-        ControlKind.SEAT_POSITION->p.seat.toDouble()
+        ControlKind.SEAT_POSITION->if(c.presetManaged) p.seat.toDouble() else current[c.id]?:c.min
+        else->current[c.id]?:c.min
     })
     private fun normalized(c:VehicleControl,v:Double):Double {
+        if(c.choices.isNotEmpty()) return c.choices.keys.minBy { abs(it-v) }
         val step=c.step.takeIf { it.isFinite() && it>0 }?:1.0
         return (c.min+round((v-c.min)/step)*step).coerceIn(c.min,c.max)
     }
@@ -237,31 +241,41 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         }
         error("차량 반영 확인 필요")
     }
-    suspend fun applyMode() {
+    suspend fun applyMode(onlyEdited:Boolean=false) {
         if(!active || !canControl)return
         busy=true
         val selectedMode=selected
         val preset=presets.getValue(selectedMode)
-        val targets=reading.controls.filter { it.writable }.associate { it.id to target(it,preset) }
+        val targets=plannedControls.filter { !onlyEdited || it.id in overrides }.associate { it.id to target(it,preset) }
+        if(targets.isEmpty()) { busy=false;message="변경할 항목을 선택하세요";return }
         try { mutex.withLock {
             readLatest()
             if(!parkingState.allowsControl || !fresh) { message="주차 상태와 연결을 확인하세요";return@withLock }
             val controls=reading.controls.filter { it.writable && targets.containsKey(it.id) }.sortedBy {
-                if(it.kind==ControlKind.POWER && targets[it.id]==0.0) 99 else it.kind.ordinal
+                when {
+                    it.kind==ControlKind.POWER->if(targets[it.id]==0.0) 99 else -3
+                    it.kind==ControlKind.AUTO->if(targets[it.id]==0.0) -2 else 98
+                    it.kind==ControlKind.DUAL->-1
+                    else->it.kind.ordinal
+                }
             }
             controls.forEach { results[it.id]="대기" }
             for(c in controls) {
                 try { applyOne(c,targets.getValue(c.id)) }
                 catch(e:TimeoutCancellationException) { results[c.id]="실패 · 응답 시간 초과" }
                 catch(e:CancellationException) { throw e }
-                catch(e:Exception) { results[c.id]="실패 · 반영 확인 필요";Log.w("CampSession","Apply ${c.id}",e) }
+                catch(e:Exception) { results[c.id]="실패 · "+(e.message?:"반영 확인 필요").take(80);Log.w("CampSession","Apply ${c.id}",e) }
                 save()
             }
+            readLatest()
+            controls.filter { results[it.id] in listOf("적용 확인","설정 유지") }.forEach { c ->
+                if(!canRestore(current[c.id],targets[c.id]?:Double.NaN)) results[c.id]="실패 · 최종 값 확인 필요"
+            }
             val success=controls.isNotEmpty() && controls.all { results[it.id] in listOf("적용 확인","설정 유지") }
-            if(success) mode=selectedMode
-            modeStatus=if(success) "적용 완료" else "일부 적용 · 확인 필요"
+            if(success && !onlyEdited) mode=selectedMode
+            modeStatus=if(success) { if(onlyEdited) "개별 설정 적용" else "적용 완료" } else "일부 적용 · 확인 필요"
             message=modeStatus
-            readLatest();save()
+            save()
         } } finally { busy=false;save() }
     }
     suspend fun restore() {

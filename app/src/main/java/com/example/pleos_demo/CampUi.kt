@@ -40,7 +40,8 @@ internal fun Double?.fmt()=this?.takeIf { it.isFinite() }?.let { String.format(L
 private fun stamp(t:Long)=if(t<=0) "수신 대기" else SimpleDateFormat("HH:mm",Locale.KOREA).format(Date(t))
 private fun controlValue(c:VehicleControl,v:Double?):String=when {
     v==null->"확인 필요"
-    c.kind in listOf(ControlKind.POWER,ControlKind.AC,ControlKind.RECIRCULATION)->if(v>0) "켜짐" else "꺼짐"
+    c.choices.isNotEmpty()->c.choices[v]?:"확인 필요"
+    c.kind in listOf(ControlKind.POWER,ControlKind.AC,ControlKind.RECIRCULATION,ControlKind.AUTO,ControlKind.DUAL,ControlKind.AIR_CLEANER,ControlKind.DEFROSTER)->if(v>0) "켜짐" else "꺼짐"
     c.kind==ControlKind.SEAT_TEMPERATURE->when { v<0->"통풍 ${(-v).toInt()}단";v>0->"열선 ${v.toInt()}단";else->"꺼짐" }
     c.kind==ControlKind.SEAT_POSITION->"${v.toInt()} · 위치"
     else->v.fmt()+c.kind.unit
@@ -49,7 +50,7 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
 @Composable fun CampApp() {
     val context=LocalContext.current
     val preferences=remember { context.getSharedPreferences("camp_on_preferences",0) }
-    var demo by rememberSaveable { mutableStateOf(preferences.getBoolean("demo",true)) }
+    var demo by rememberSaveable { mutableStateOf(preferences.getBoolean("demo",false)) }
     key(demo) {
         val source=remember {
             if(demo) DemoVehicleSource(context) else runCatching<VehicleSource> { PleosVehicleSource(context) }.getOrElse {
@@ -83,7 +84,7 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
         launch { while(true) { s.refresh();delay(5000) } }
         launch { while(true) { s.now=System.currentTimeMillis();s.refreshParking();delay(2000) } }
     } }
-    BackHandler(s.minimized || page!=0) { if(s.minimized)s.setMinimized(false) else page=0 }
+    BackHandler(s.minimized || page!=0) { if(s.minimized)s.updateMinimized(false) else page=0 }
     Surface(Modifier.fillMaxSize(),color=CampBackground) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val wide=maxWidth>=1080.dp
@@ -111,7 +112,7 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                     }
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-                    WarningCard(s,{page=1;s.setMinimized(false)},{page=2;s.setMinimized(false)})
+                    WarningCard(s,{page=1;s.updateMinimized(false)},{page=2;s.updateMinimized(false)})
                     if(s.message.isNotBlank()) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                         Text(s.message,Modifier.weight(1f),color=CampAccent)
                         TextButton(onClick={s.message=""}) { Text("닫기") }
@@ -131,7 +132,7 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
             }
         }
     }
-    if(editor) ControlEditor(s,{editor=false}) { editor=false;confirm="apply" }
+    if(editor) ControlEditor(s,{editor=false}) { editor=false;confirm="controls" }
     if(presetDialog) PresetDialog(s) { presetDialog=false }
     if(settings) SettingsDialog(s,{settings=false},switchSource) { scenario->
         (s.source as? DemoVehicleSource)?.scenario(scenario)
@@ -139,12 +140,12 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
     }
     if(confirm.isNotEmpty()) {
         val kind=confirm
-        Modal(if(kind=="apply") "${s.selected.label} 모드 적용" else if(kind=="start") "캠핑을 시작할까요?" else if(kind=="manual") "직접 복원 확인" else "캠핑 종료·복원",
+        Modal(if(kind=="controls") "차량 설정 적용" else if(kind=="apply") "${s.selected.label} 모드 적용" else if(kind=="start") "캠핑을 시작할까요?" else if(kind=="manual") "직접 복원 확인" else "캠핑 종료·복원",
             {confirm=""}) {
             when(kind) {
-                "apply"->{
+                "apply","controls"->{
                     Caption("현재값 → 요청값")
-                    s.reading.controls.filter { it.writable }.forEach { c->
+                    s.plannedControls.filter { kind!="controls" || it.id in s.overrides }.forEach { c->
                         LabelValue(c.label,"${controlValue(c,s.current[c.id])} → ${controlValue(c,s.target(c))}")
                     }
                     Caption("변경 후 남은 소비 예상 ${s.previewBudget?.consumption.fmt()} kWh · 추정")
@@ -158,12 +159,13 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                     s.written.keys.forEach { id->Caption("${s.reading.controls.find { it.id==id }?.label?:id} → ${s.initial[id].fmt()}") }
                 }
             }
-            PrimaryAction(if(kind=="apply") "확인하고 적용" else if(kind=="start") "캠핑 시작" else if(kind=="manual") "직접 확인 완료" else "종료·복원",
-                enabled=if(kind=="manual") !s.busy else s.canControl && (kind!="apply" || s.active),
+            PrimaryAction(if(kind=="apply" || kind=="controls") "확인하고 적용" else if(kind=="start") "캠핑 시작" else if(kind=="manual") "직접 확인 완료" else "종료·복원",
+                enabled=if(kind=="manual") !s.busy else s.canControl && (kind !in listOf("apply","controls") || s.active),
                 modifier=Modifier.fillMaxWidth()) {
                 confirm=""
                 scope.launch { when(kind) {
                     "apply"->s.applyMode()
+                    "controls"->s.applyMode(onlyEdited=true)
                     "start"->s.start()
                     "manual"->s.acknowledgeManualRestore()
                     else->s.endAndRestore()
@@ -185,7 +187,7 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
             Text(if(s.active) s.mode.subtitle else "오늘의 쉼을 켜세요",style=MaterialTheme.typography.headlineLarge)
         }
         if(!s.active) PrimaryAction("캠핑 시작",s.canControl && s.written.isEmpty(),action=start)
-        else if(s.mode==CampMode.SLEEP) SecondaryAction("화면 최소화") { s.setMinimized(true) }
+        else if(s.mode==CampMode.SLEEP) SecondaryAction("화면 최소화") { s.updateMinimized(true) }
     }
     Split(wide,left={
         Panel(Modifier.fillMaxWidth()) {
@@ -278,9 +280,9 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
         if(group==2) Image(painterResource(R.drawable.cabin_top),"3열 SUV 시트 배치",
             Modifier.fillMaxWidth().height(240.dp).clip(RoundedCornerShape(16.dp)),contentScale=ContentScale.Fit)
         val controls=s.reading.controls.filter { c->when(group) {
-            1->c.kind==ControlKind.LIGHT
+            1->c.kind in listOf(ControlKind.LIGHT,ControlKind.CABIN_LIGHT,ControlKind.READING_LIGHT)
             2->c.kind in listOf(ControlKind.SEAT_POSITION,ControlKind.SEAT_TEMPERATURE)
-            else->c.kind in listOf(ControlKind.POWER,ControlKind.TEMPERATURE,ControlKind.FAN,ControlKind.AC,ControlKind.RECIRCULATION)
+            else->c.kind in listOf(ControlKind.POWER,ControlKind.TEMPERATURE,ControlKind.FAN,ControlKind.AC,ControlKind.RECIRCULATION,ControlKind.AUTO,ControlKind.DUAL,ControlKind.AIR_CLEANER,ControlKind.FAN_DIRECTION,ControlKind.DEFROSTER)
         } }
         if(controls.isEmpty()) Caption("연결된 지원 항목이 없습니다.")
         controls.forEach { c->
@@ -288,8 +290,14 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                 Text(c.label,style=MaterialTheme.typography.titleMedium)
                 Caption("현재 ${controlValue(c,s.current[c.id].takeIf { s.fresh })} · ${s.results[c.id]?:if(c.writable) "변경 가능" else "조회 전용"}")
                 if(c.writable) {
-                    val v=s.target(c)
-                    if(c.kind in listOf(ControlKind.POWER,ControlKind.AC,ControlKind.RECIRCULATION)) {
+                    val v=s.overrides[c.id]?:s.current[c.id]?:s.target(c)
+                    if(c.choices.isNotEmpty()) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            c.choices.forEach { (value,label)->
+                                FilterChip(v==value,{s.setTarget(c,value)},label={Text(label)},enabled=!s.busy,modifier=Modifier.heightIn(min=56.dp))
+                            }
+                        }
+                    } else if(c.kind in listOf(ControlKind.POWER,ControlKind.AC,ControlKind.RECIRCULATION,ControlKind.AUTO,ControlKind.DUAL,ControlKind.AIR_CLEANER,ControlKind.DEFROSTER)) {
                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                             Text("요청 ${controlValue(c,v)}",Modifier.weight(1f))
                             Switch(v>0,{s.setTarget(c,if(it)1.0 else 0.0)},enabled=!s.busy)
@@ -303,8 +311,8 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                 HorizontalDivider(color=CampLine)
             }
         }
-        if(!s.isDemo && group==2) Caption("절대 위치 복원이 없는 시트는 차량에서 조절하세요.")
-        PrimaryAction("변경 내용 확인",s.active && s.canControl,Modifier.fillMaxWidth(),apply)
+        if(!s.isDemo && group==2) Caption("위치와 이동을 모두 지원하는 시트만 조절합니다. 이동 후 실제 위치를 확인합니다.")
+        PrimaryAction("변경 내용 확인",s.active && s.canControl && s.overrides.isNotEmpty(),Modifier.fillMaxWidth(),apply)
         if(!s.active) Caption("캠핑을 시작한 뒤 적용할 수 있습니다.")
     }
 }
@@ -355,9 +363,10 @@ private fun controlValue(c:VehicleControl,v:Double?):String=when {
                 Field(s,"efficiency","전비 · km/kWh",Modifier.weight(1f),valid=validNumber(s,"efficiency",positive=true))
             }
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                Field(s,"capacity","사용 가능 용량 · kWh",Modifier.weight(1f),valid=validNumber(s,"capacity",positive=true))
+                Field(s,"capacity","용량 보정 · kWh (비우면 차량값)",Modifier.weight(1f),valid=s.fields["capacity"].isNullOrBlank() || validNumber(s,"capacity",positive=true))
                 Field(s,"reserve","보호 예비량 · kWh",Modifier.weight(1f),valid=validNumber(s,"reserve"))
             }
+            Caption("계산 용량 ${s.capacityKwh.fmt()} kWh · "+if(s.fields["capacity"].isNullOrBlank()) "차량 공칭 사용 가능 용량 / 신차 기준" else "사용자 입력")
             Field(s,"baseKw","기본 부하 · kW",valid=validNumber(s,"baseKw"))
         }
     },right={
@@ -452,7 +461,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
 @Composable private fun BatteryChart(s:CampSession) {
     val points=s.history.toList()
     val end=s.endMillis
-    val capacity=s.number("capacity")
+    val capacity=s.capacityKwh
     val predicted=if(capacity!=null && capacity>0) s.budget?.departure?.div(capacity)?.times(100) else null
     val first=points.firstOrNull()?.time?:s.now
     val last=maxOf(end?:s.now,s.now,first+1)
@@ -481,7 +490,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
         Text("편안한 밤 되세요",style=MaterialTheme.typography.headlineLarge)
         Caption("종료 예정 ${s.fields["end"]} · 최근 수신 ${stamp(s.reading.time)}")
         Caption(if(s.budget?.continuedShortfall==0.0) "계획 기준 귀가 에너지 확보 예상" else "귀가 에너지를 확인하세요")
-        PrimaryAction("화면 열기") { s.setMinimized(false) }
+        PrimaryAction("화면 열기") { s.updateMinimized(false) }
     }
 }
 @Composable private fun DepartureScreen(s:CampSession,wide:Boolean,end:()->Unit,manual:()->Unit,plan:()->Unit) {

@@ -7,21 +7,26 @@ import ai.pleos.playground.vehicle.api.model.capability.AccessType
 import ai.pleos.playground.vehicle.api.model.capability.AreaBounds
 import ai.pleos.playground.vehicle.api.model.capability.CapabilityConfig
 import ai.pleos.playground.vehicle.constant.unit.TemperatureUnit
+import ai.pleos.playground.vehicle.constant.control.FanDirectionType
+import ai.pleos.playground.vehicle.constant.control.LightSwitch
+import ai.pleos.playground.vehicle.constant.control.MoveControl
+import ai.pleos.playground.vehicle.api.model.area.WindowArea
 import kotlinx.coroutines.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 enum class ControlKind(val title: String, val unit: String) {
     POWER("공조 전원",""), TEMPERATURE("목표 온도","°C"), FAN("풍량","단"),
-    AC("A/C",""), RECIRCULATION("내기순환",""), LIGHT("조명","%"), SEAT_TEMPERATURE("시트 열선·통풍","단"), SEAT_POSITION("시트 등받이","")
+    AC("A/C",""), RECIRCULATION("내기순환",""), LIGHT("조명","%"), SEAT_TEMPERATURE("시트 열선·통풍","단"), SEAT_POSITION("시트 등받이",""), AUTO("자동 공조",""), DUAL("좌우 온도 연동",""), AIR_CLEANER("공기 청정",""), FAN_DIRECTION("바람 방향",""), DEFROSTER("성에 제거",""), CABIN_LIGHT("실내등",""), READING_LIGHT("독서등","")
 }
 data class VehicleControl(val id: String, val label: String, val kind: ControlKind,
-    val min: Double, val max: Double, val step: Double = 1.0, val writable: Boolean)
+    val min: Double, val max: Double, val step: Double = 1.0, val writable: Boolean,
+    val choices: Map<Double,String> = emptyMap(), val presetManaged: Boolean = true)
 data class VehicleReading(val soc: Double?=null, val charging: Boolean?=null,
     val cabin: Double?=null, val values: Map<String,Double> = emptyMap(),
     val controls: List<VehicleControl> = emptyList(), val errors: Map<String,String> = emptyMap(),
     val time: Long=System.currentTimeMillis(), val source: String="Pleos SDK",
-    val observedAt: Map<String,Long> = emptyMap()) {
+    val observedAt: Map<String,Long> = emptyMap(), val nominalCapacityKwh:Double?=null) {
     fun isFresh(id: String, now: Long) = now - (observedAt[id] ?: time) in 0 until 30_000
 }
 data class ParkingState(val parked: Boolean?, val unrestricted: Boolean?, val time: Long=System.currentTimeMillis()) {
@@ -56,10 +61,11 @@ class PleosVehicleSource(context: Context) : VehicleSource {
     private fun areaName(area: SeatArea) = area.values.joinToString("+") { it.name }
     private fun areaLabel(area: SeatArea) = areaName(area).replace("ROW_1", "앞좌석").replace("ROW_2", "뒷좌석").replace("LEFT", "왼쪽").replace("RIGHT", "오른쪽").replace("CENTER", "가운데").replace("_", " ")
     private fun bind(kind:ControlKind,area:SeatArea,config:CapabilityConfig,min:Double,max:Double,step:Double=1.0,
+                     choices:Map<Double,String> = emptyMap(), presetManaged:Boolean=true,
                      read:suspend ()->Double?,write:suspend (Double)->Unit) {
         if(!config.readable() || !min.isFinite() || !max.isFinite() || min>max) return
         val id=kind.name+":"+areaName(area)
-        bindings[id]=Binding(VehicleControl(id,kind.title+" · "+areaLabel(area),kind,min,max,step,config.writable()),read,write)
+        bindings[id]=Binding(VehicleControl(id,kind.title+" · "+areaLabel(area),kind,min,max,step,config.writable(),choices,presetManaged),read,write)
     }
     private suspend fun discover() {
         bindings.clear(); capabilityErrors.clear()
@@ -100,6 +106,7 @@ class PleosVehicleSource(context: Context) : VehicleSource {
                 val (config,areas)=response<Pair<CapabilityConfig,List<SeatArea>>> { ok,fail -> capabilities({ c,a->ok(c to a) },fail) }
                 areas.forEach { area ->
                     bind(kind,area,config,0.0,1.0,
+                        presetManaged=kind in listOf(ControlKind.POWER,ControlKind.AC,ControlKind.RECIRCULATION),
                         read={ response<Boolean?> { ok,fail -> read(area,ok,fail) }?.let { if(it) 1.0 else 0.0 } },
                         write={ value -> response<Unit> { ok,fail -> write(area,value==1.0,{ _,_->ok(Unit) },fail) } })
                 }
@@ -108,6 +115,67 @@ class PleosVehicleSource(context: Context) : VehicleSource {
         switches(ControlKind.POWER,{ ok,fail->hvac.checkHvacPowerCapabilities(ok,fail) },hvac::getHvacPowerState,hvac::setHvacPower)
         switches(ControlKind.AC,{ ok,fail->hvac.checkHvacAcCapabilities(ok,fail) },hvac::getHvacAcState,hvac::setHvacAc)
         switches(ControlKind.RECIRCULATION,{ ok,fail->hvac.checkHvacRecirculationCapabilities(ok,fail) },hvac::getHvacRecirculationState,hvac::setHvacRecirculation)
+        switches(ControlKind.AUTO,{ ok,fail->hvac.checkHvacAutoCapabilities(ok,fail) },hvac::getHvacAutoState,hvac::setHvacAuto)
+        switches(ControlKind.DUAL,{ ok,fail->hvac.checkHvacDualCapabilities(ok,fail) },hvac::getHvacDualState,hvac::setHvacDual)
+        switches(ControlKind.AIR_CLEANER,{ ok,fail->hvac.checkHvacAirCleanerCapabilities(ok,fail) },hvac::getHvacAirCleanerState,hvac::setHvacAirCleaner)
+        attempt("바람 방향") {
+            val (config,areas)=response<Pair<CapabilityConfig,Map<SeatArea,List<FanDirectionType>>>> { ok,fail ->
+                hvac.checkHvacFanDirectionCapabilities({ c,a->ok(c to a) },fail)
+            }
+            val labels=mapOf("FACE" to "상체","FLOOR" to "발","FACE_AND_FLOOR" to "상체·발",
+                "DEFROST" to "앞유리","FACE_AND_DEFROST" to "상체·앞유리",
+                "DEFROST_AND_FLOOR" to "앞유리·발","FACE_AND_FLOOR_AND_DEFROST" to "전체")
+            areas.forEach { (area,supported) ->
+                val choices=supported.filter { it!=FanDirectionType.UNKNOWN }.associate { it.ordinal.toDouble() to (labels[it.name]?:it.name) }
+                if(choices.isNotEmpty()) bind(ControlKind.FAN_DIRECTION,area,config,choices.keys.min(),choices.keys.max(),
+                    choices=choices,presetManaged=false,
+                    read={ response<FanDirectionType?> { ok,fail->hvac.getHvacFanDirection(area,ok,fail) }?.ordinal?.toDouble() },
+                    write={ value->response<Unit> { ok,fail->hvac.setHvacFanDirection(area,FanDirectionType.entries[value.toInt()],{ _,_->ok(Unit) },fail) } })
+            }
+        }
+        attempt("성에 제거") {
+            val (config,areas)=response<Pair<CapabilityConfig,List<WindowArea>>> { ok,fail ->
+                hvac.checkHvacDefrosterCapabilities({ c,a->ok(c to a) },fail)
+            }
+            if(config.readable()) areas.forEach { area ->
+                val name=area.values.joinToString("+") { it.name }
+                val id="DEFROSTER:"+name
+                bindings[id]=Binding(VehicleControl(id,"성에 제거 · "+name,ControlKind.DEFROSTER,0.0,1.0,
+                    writable=config.writable(),presetManaged=false),
+                    read={ response<Boolean?> { ok,fail->hvac.getHvacDefrosterState(area,ok,fail) }?.let { if(it)1.0 else 0.0 } },
+                    write={ value->response<Unit> { ok,fail->hvac.setHvacDefroster(area,value==1.0,{ _,_->ok(Unit) },fail) } })
+            }
+        }
+        fun lightChoices(values:List<LightSwitch>)=values.associate { it.ordinal.toDouble() to when(it) {
+            LightSwitch.OFF->"꺼짐";LightSwitch.ON->"켜짐";LightSwitch.AUTOMATIC->"자동";else->it.name
+        } }
+        attempt("실내등") {
+            val light=vehicle.getLight()
+            val (config,values)=response<Pair<CapabilityConfig,List<LightSwitch>>> { ok,fail ->
+                light.checkCabinLightSwitchCapabilities({ c,a->ok(c to a) },fail)
+            }
+            val choices=lightChoices(values)
+            if(config.readable() && choices.isNotEmpty()) {
+                val id="CABIN_LIGHT:GLOBAL"
+                bindings[id]=Binding(VehicleControl(id,"실내등",ControlKind.CABIN_LIGHT,choices.keys.min(),choices.keys.max(),
+                    writable=config.writable(),choices=choices,presetManaged=false),
+                    read={ response<LightSwitch?> { ok,fail->light.getCabinLightSwitch(ok,fail) }?.ordinal?.toDouble() },
+                    write={ value->response<Unit> { ok,fail->light.setCabinLightSwitch(LightSwitch.entries[value.toInt()],{ ok(Unit) },fail) } })
+            }
+        }
+        attempt("독서등") {
+            val light=vehicle.getLight()
+            val (config,areas)=response<Pair<CapabilityConfig,Map<SeatArea,List<LightSwitch>>>> { ok,fail ->
+                light.checkReadingLightSwitchCapabilities({ c,a->ok(c to a) },fail)
+            }
+            areas.forEach { (area,values)->
+                val choices=lightChoices(values)
+                if(choices.isNotEmpty()) bind(ControlKind.READING_LIGHT,area,config,choices.keys.min(),choices.keys.max(),
+                    choices=choices,presetManaged=false,
+                    read={ response<LightSwitch?> { ok,fail->light.getReadingLightSwitch(area,ok,fail) }?.ordinal?.toDouble() },
+                    write={ value->response<Unit> { ok,fail->light.setReadingLightSwitch(area,LightSwitch.entries[value.toInt()],{ ok(Unit) },fail) } })
+            }
+        }
         attempt("조명") {
             val light=vehicle.getLight()
             val (config,areas)=response<Pair<CapabilityConfig,Map<SeatArea,AreaBounds<Int>>>> { ok,fail ->
@@ -130,19 +198,45 @@ class PleosVehicleSource(context: Context) : VehicleSource {
                     write={ value->response<Unit> { ok,fail->seat.setHvacSeatTemperature(area,value.toInt(),{ _,_->ok(Unit) },fail) } })
             }
         }
-        // SDK exposes movement commands, not an absolute position setter. Do not simulate a rest position.
+        // Position feedback is required; MOVE support alone cannot promise a restorable setting.
         attempt("시트 위치") {
             val seat=vehicle.getSeat()
             val (config,areas)=response<Pair<CapabilityConfig,Map<SeatArea,AreaBounds<Int>>>> { ok,fail ->
                 seat.checkSeatBackrestAnglePositionCapabilities({ c,a->ok(c to a) },fail)
             }
+            val (moveConfig,moveAreas)=response<Pair<CapabilityConfig,List<SeatArea>>> { ok,fail ->
+                seat.checkMoveSeatBackrestAngleCapabilities({ c,a->ok(c to a) },fail)
+            }
             areas.forEach { (area,bounds) ->
                 if(config.readable()) {
                     val id=ControlKind.SEAT_POSITION.name+":"+areaName(area)
                     bindings[id]=Binding(VehicleControl(id,"시트 등받이 · "+areaLabel(area),ControlKind.SEAT_POSITION,
-                        bounds.minValue.toDouble(),bounds.maxValue.toDouble(),writable=false),
+                        bounds.minValue.toDouble(),bounds.maxValue.toDouble(),writable=moveConfig.writable() && area in moveAreas,presetManaged=false),
                         read={ response<Int?> { ok,fail->seat.getCurrentSeatBackrestAnglePosition(area,ok,fail) }?.toDouble() },
-                        write={ error("위치 복원 미지원") })
+                        write={ target ->
+                            withTimeout(15_000) {
+                                repeat(40) {
+                                    check(parking().allowsControl) { "주차 상태 확인 필요" }
+                                    val position=response<Int?> { ok,fail->seat.getCurrentSeatBackrestAnglePosition(area,ok,fail) }
+                                        ?: error("시트 위치 확인 불가")
+                                    if(position.toDouble()==target) return@withTimeout
+                                    val direction=if(target>position) MoveControl.FORWARD else MoveControl.BACKWARD
+                                    try {
+                                        response<Unit> { ok,fail->seat.moveSeatBackrestAngle(area,direction,{ _,_->ok(Unit) },fail) }
+                                        delay(100)
+                                    } finally {
+                                        withContext(NonCancellable) {
+                                            response<Unit> { ok,fail->seat.moveSeatBackrestAngle(area,MoveControl.STOP,{ _,_->ok(Unit) },fail) }
+                                        }
+                                    }
+                                    val after=response<Int?> { ok,fail->seat.getCurrentSeatBackrestAnglePosition(area,ok,fail) }
+                                        ?: error("시트 위치 확인 불가")
+                                    check(after!=position) { "시트 이동 확인 불가" }
+                                    check((target-position)*(after-position)>0) { "시트 이동 방향 확인 필요" }
+                                }
+                                error("시트 목표 위치 확인 필요")
+                            }
+                        })
                 }
             }
         }
@@ -164,6 +258,7 @@ class PleosVehicleSource(context: Context) : VehicleSource {
                 try { block().also { if(it!=null) observedAt[name]=System.currentTimeMillis() } } catch(e:TimeoutCancellationException) { errors[name]="응답 시간 초과";null }
                 catch(e:CancellationException) { throw e }
                 catch(e:Exception) { errors[name]=e.message ?: "조회 실패";null }
+            val capacity=async { readValue("차량 공칭 용량") { gate.nominalCapacityKwh() } }
             val soc=async {
                 readValue("배터리") {
                     val battery=vehicle.getEvBattery()
@@ -185,7 +280,7 @@ class PleosVehicleSource(context: Context) : VehicleSource {
             } }
             val values=bindings.values.map { b->async { b.control.id to readValue(b.control.id) { b.read() } } }.awaitAll()
                 .mapNotNull { (id,value)->value?.takeIf { it.isFinite() }?.let { id to it } }.toMap()
-            VehicleReading(soc.await(),charging.await(),cabin.await(),values,bindings.values.map { it.control },errors,observedAt=observedAt)
+            VehicleReading(soc.await(),charging.await(),cabin.await(),values,bindings.values.map { it.control },errors,observedAt=observedAt,nominalCapacityKwh=capacity.await())
         }
     }
     override suspend fun parking() = gate.read()
@@ -197,6 +292,7 @@ class PleosVehicleSource(context: Context) : VehicleSource {
         require(value.isFinite() && value in binding.control.min..binding.control.max) { "지원 범위를 벗어난 값" }
         val steps=(value-binding.control.min)/binding.control.step
         require(kotlin.math.abs(steps-kotlin.math.round(steps))<0.001) { "지원 증분 확인 필요" }
+        require(binding.control.choices.isEmpty() || value in binding.control.choices) { "지원하지 않는 선택값" }
         binding.write(value)
     }
     override fun close() { gate.close(); vehicle.release() }

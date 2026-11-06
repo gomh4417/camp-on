@@ -82,6 +82,25 @@ class CampSessionTest {
         Unit
     }
 
+    @Test fun individualControlDoesNotApplyUneditedPresetValues()=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_individual_${System.nanoTime()}"
+        val vehicle=VehicleFake().apply { failLight=false }
+        try {
+            val s=CampSession(context,vehicle,name)
+            s.start()
+            s.setTarget(vehicle.controls.first(),25.0)
+            s.applyMode(onlyEdited=true)
+            assertEquals(1,vehicle.writes)
+            assertEquals(25.0,vehicle.values.getValue("temperature"),0.0)
+            assertEquals(30.0,vehicle.values.getValue("light"),0.0)
+            s.restore()
+            assertEquals(24.0,vehicle.values.getValue("temperature"),0.0)
+            assertTrue(s.written.isEmpty())
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+        Unit
+    }
+
     @Test fun unknownParkingBlocksWrites()=runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val name="test_parking_${System.nanoTime()}"
