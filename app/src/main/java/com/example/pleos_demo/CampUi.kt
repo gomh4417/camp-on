@@ -189,36 +189,16 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {
         Column(Modifier.weight(1f)) {
             Caption("오늘도, 편안한 캠핑")
-            Text(if(s.active) s.mode.subtitle else "우리만의 쉼을 시작해요",style=MaterialTheme.typography.headlineLarge)
+            Text("차와 함께, 캠핑의 하루",style=MaterialTheme.typography.headlineLarge)
         }
         if(!s.active) PrimaryAction("캠핑 시작",s.canControl,action=start)
         else if(s.mode==CampMode.SLEEP) SecondaryAction("화면 최소화") { s.updateMinimized(true) }
     }
+    var vehicleDetails by rememberSaveable { mutableStateOf(false) }
     Split(wide,left={
-        CabinPanel(s,edit,presets)
-        Panel(Modifier.fillMaxWidth()) {
-            Caption("지금은 어떤 시간인가요?")
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                CampMode.visible.forEach { m->
-                    OutlinedButton(onClick={s.selectMode(m)},enabled=!s.busy,
-                        modifier=Modifier.weight(1f).heightIn(min=84.dp),shape=RoundedCornerShape(16.dp),
-                        colors=ButtonDefaults.outlinedButtonColors(containerColor=if(s.selected==m) CampAccent else Color.Transparent,
-                            contentColor=if(s.selected==m) CampBackground else CampInk)) {
-                        Column(horizontalAlignment=Alignment.CenterHorizontally) {
-                            ModeArt(m,Modifier.size(88.dp))
-                            Text(m.label,style=MaterialTheme.typography.titleLarge)
-                        }
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("${s.selected.label} 설정",style=MaterialTheme.typography.titleMedium)
-                    Caption("적용 후 소비 예상 ${s.previewBudget?.consumption.fmt()} kWh")
-                }
-                PrimaryAction("모드 적용",s.active && s.canControl,action=apply)
-            }
-        }
+        CampExperience(s,start,apply,plan,edit)
+        SecondaryAction(if(vehicleDetails)"차량 세부 설정 접기" else "차량 세부 설정 열기",modifier=Modifier.fillMaxWidth()) { vehicleDetails=!vehicleDetails }
+        if(vehicleDetails) CabinPanel(s,edit,presets)
     },right={
         Panel(Modifier.fillMaxWidth(),emphasis=true) {
             Caption("오늘 쓸 수 있는 여유")
@@ -370,6 +350,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
     val b=s.budget
     val title=when {
         !s.fresh->if(s.refreshing) "차량 정보를 불러오는 중" else "현재 에너지 판단 불가"
+        !s.endValid()->"캠핑 종료 예정 시각을 다시 정해주세요"
         b==null->"계산에 필요한 정보를 확인하세요"
         b.protectedShortfall>0->"현재 귀가 확보량 부족 · ${b.protectedShortfall.fmt()} kWh"
         b.overBudget>0->"남은 계획 초과 · ${b.overBudget.fmt()} kWh"

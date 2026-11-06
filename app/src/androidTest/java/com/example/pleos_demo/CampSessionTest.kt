@@ -32,6 +32,28 @@ class CampSessionTest {
         override fun close() {}
     }
 
+    @Test fun guideProgressAndTimerSurviveRestartWithoutVehicleWrites() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_guide_${System.nanoTime()}"
+        val vehicle=VehicleFake()
+        try {
+            val s=CampSession(context,vehicle,name)
+            val deadline=System.currentTimeMillis()+900_000
+            s.edit("guide.COOK.step","1")
+            s.edit("guide.COOK.check.0.0","true")
+            s.edit("guide.COOK.deadline",deadline.toString())
+            s.selectMode(CampMode.SLEEP)
+            val resumed=CampSession(context,vehicle,name)
+            assertEquals("1",resumed.fields["guide.COOK.step"])
+            assertEquals("true",resumed.fields["guide.COOK.check.0.0"])
+            assertEquals(deadline.toString(),resumed.fields["guide.COOK.deadline"])
+            assertEquals(CampMode.SLEEP,resumed.selected)
+            assertEquals(0,vehicle.writes)
+            resumed.edit("guide.COOK.deadline","0")
+            assertEquals("0",CampSession(context,vehicle,name).fields["guide.COOK.deadline"])
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+    }
+
     @Test fun partialDuplicateRestartAndManualRestore()=runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val name="test_camp_${System.nanoTime()}"

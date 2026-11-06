@@ -35,6 +35,10 @@ import java.util.Locale
     val kw=s.climateKw?.let { climate->s.number("baseKw")?.let { it+climate } }
     val points=Energy.forecast(capacity,s.soc,s.remainingHours,kw,s.remainingEquipment())
     Text("시간에 따른 배터리",style=MaterialTheme.typography.titleMedium)
+    if(!s.endValid()) {
+        Caption("종료 예정 시각을 새로 정하면 앞으로의 배터리를 계산해요")
+        return
+    }
     if(points==null || capacity==null) {
         Caption("배터리·사용 계획을 확인하면 예상 그래프가 나타나요")
         return

@@ -1,5 +1,25 @@
 # 차량 이미지
 
+## 캠핑 경험 장면 (2026-11-07)
+
+내장 image_gen으로 생성하고 원본 PNG를 drawable-nodpi에 복사. 외부 GIF/Lottie 파일은 포함하지 않음.
+- camp_story_cook.png: EV 옆 야외 전기 조리.
+- camp_story_relax.png: EV·텐트 옆 의자에서 음료와 휴식.
+- camp_story_sleep.png: EV 뒤쪽 침낭에서 취침 준비.
+- CampExperience.kt: 장면 페이드, 진행 단계의 김/별 효과. 정지 이미지 선택 및 시스템 애니메이션 설정 반영.
+
+공통 프롬프트: Use case illustration-story; CAMP:ON EV camping assistant hero, wide 3:2, transparent background. Original small round cream bear, charcoal dot eyes, cocoa oval nose, peach cheeks, mustard neckerchief, blue dungarees. Flat friendly vector-like illustration, subtle shading, slate outlines, ivory/muted blue/warm orange palette. No text/logos/UI/3D render. Entire scene and safe margins.
+개별 프롬프트:
+- cook: Bear preparing meal at OUTDOOR camping table beside pale gray electric SUV and orange tent; induction cooker, pot, vegetables, spoon; no fire or gas canister; stationary car.
+- relax: Bear lounging in folding chair with blue enamel mug beside pale gray electric SUV, open tailgate, orange tent, warm lantern on low table and sunset; stationary car.
+- sleep: Bear tucked into navy sleeping bag in open rear cabin of stationary pale gray electric SUV, orange tent, crescent and stars, low warm lantern; no flames or engine smoke.
+
+참고 검색:
+- https://lottiefiles.com/free-animation/camping-with-my-best-friend-VM4yBTHTr1 (캠핑·요리 동작 사례, 다운로드/재배포하지 않음)
+- https://www.rive.app/marketplace/ (상태 기반 인터랙션 사례)
+- https://developer.android.com/develop/ui/compose/animation/composables-modifiers (Compose 전환 구현)
+
+
 ## 라이트·플랫 UI용 분리 레이어 (최신)
 
 내장 image_gen 사용. 두 PNG는 투명 배경으로 생성해 리소스에 복사했다.
