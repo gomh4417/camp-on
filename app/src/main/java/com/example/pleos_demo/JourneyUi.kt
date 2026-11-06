@@ -1,131 +1,227 @@
 package com.example.pleos_demo
 
 import android.content.Intent
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.ui.semantics.Role
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+@Composable private fun Avatar(id:String,modifier:Modifier=Modifier) {
+    val drawable=when(id) { "princess"->R.drawable.mvp_profile_princess; "tralala"->R.drawable.mvp_profile_tralala;else->R.drawable.mvp_profile_tiramisu }
+    Image(painterResource(drawable),null,modifier.size(56.dp).clip(CircleShape))
+}
+@Composable private fun VehicleRow(j:JourneySession,v:JSONObject,selected:Boolean=false,action:()->Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if(selected)Color.White else Color(0xFFF7F7F8))
+        .border(if(selected)2.dp else 0.dp,if(selected)Color(0xFFCFDFFF) else Color.Transparent,RoundedCornerShape(16.dp))
+        .clickable(onClick=action).padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+        Avatar(v.optString("id"))
+        Column(Modifier.weight(1f)) {
+            Text(v.label("name"),color=if(v.optString("id")==j.vehicleId)Color(0xFF008653) else CampInk,style=MaterialTheme.typography.titleMedium)
+            Caption(v.label("listStatus"))
+        }
+        Column(horizontalAlignment=Alignment.End) {
+            Text(if(v.optString("status")=="도착")"도착" else v.label("eta"))
+            Caption("▰ ${v.label("battery")}%")
+        }
+    }
+}
 
 @Composable internal fun JourneyScreen(j:JourneySession,s:CampSession,wide:Boolean,onArrived:()->Unit) {
     val scope=rememberCoroutineScope()
     val context=LocalContext.current
+    var screen by rememberSaveable { mutableIntStateOf(0) }
+    var selected by rememberSaveable { mutableStateOf(j.vehicleId) }
+    var requestId by rememberSaveable { mutableStateOf("") }
     var connection by rememberSaveable { mutableStateOf(false) }
+    var composing by rememberSaveable { mutableStateOf(false) }
     var address by rememberSaveable { mutableStateOf(j.serverUrl) }
-    var selected by rememberSaveable { mutableStateOf("") }
     var memo by rememberSaveable { mutableStateOf("") }
     val vehicle=j.vehicles.firstOrNull { it.optString("id")==selected }?:j.myVehicle
-    Text(j.groupName,style=MaterialTheme.typography.headlineLarge)
-    Caption("함께 이동  →  캠핑  →  귀가")
-    Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-        Text(j.destination,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
-        SecondaryAction("연결 설정") { connection=true }
+    BackHandler(screen!=0) { screen=0 }
+    val openOriginal:()->Unit={
+        try { context.startActivity(Intent().setClassName("com.anchor.pleosvoice","com.anchor.pleosvoice.GroupDriveActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch(_:android.content.ActivityNotFoundException) { j.message="MVP_C 차량 앱 설치가 필요해요" }
+        catch(_:SecurityException) { j.message="지도 앱을 열 수 없어요" }
     }
-    Caption(if(j.fresh) "그룹 시연 서버 연결됨 · 내 차량 ${j.name(j.vehicleId)}" else j.error.ifBlank { "그룹 서버에 연결하고 있어요" })
+    if(screen!=0) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+        FilledTonalIconButton(onClick={screen=0},modifier=Modifier.size(56.dp)) { Text("×") }
+        Spacer(Modifier.width(20.dp))
+        Text(if(screen==1)"그룹 차량" else "그룹 브리핑",Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium)
+        if(screen==2) SecondaryAction("메모 남기기") { composing=true }
+    }
+    if(!j.fresh) Caption(j.error.ifBlank { "그룹 정보를 불러오고 있어요" })
     if(j.message.isNotBlank()) Text(j.message,color=CampAccent)
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-        j.vehicles.forEach { v->
-            FilterChip(selected=vehicle?.optString("id")==v.optString("id"),onClick={selected=v.optString("id")},
-                label={Text("${v.label("name")} · ${v.label("status")}")},modifier=Modifier.heightIn(min=56.dp))
-        }
-    }
-    val details:@Composable ()->Unit={
-        Panel(Modifier.fillMaxWidth(),emphasis=true) {
-            Text(vehicle?.label("name")?:"차량 현황",style=MaterialTheme.typography.headlineMedium)
-            Text(vehicle?.label("status")?:"연결 대기",style=MaterialTheme.typography.headlineLarge)
-            Caption(vehicle?.label("location")?:"—")
-            Text("도착 ${vehicle?.label("eta")?:"—"} · 남은 거리 ${vehicle?.label("distance")?:"—"}")
-            Caption("그룹 차량 배터리 ${vehicle?.label("battery")?:"—"}% · EV 계획에는 내 차량 SDK 값만 사용해요")
-            SecondaryAction("지도·음성 메모 열기",modifier=Modifier.fillMaxWidth()) {
-                try {
-                    context.startActivity(Intent().setClassName("com.anchor.pleosvoice","com.anchor.pleosvoice.GroupDriveActivity")
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch(_:android.content.ActivityNotFoundException) {
-                    j.message="MVP_C의 차량 APK를 먼저 설치해주세요"
-                } catch(_:SecurityException) { j.message="원본 지도 앱을 열 수 없어요" }
-            }
-        }
-    }
-    val briefing:@Composable ()->Unit={
-        Panel(Modifier.fillMaxWidth()) {
-            Text("우리 그룹 브리핑",style=MaterialTheme.typography.titleLarge)
-            Text(j.state?.label("summary")?:"서버에 연결하면 브리핑이 나타나요")
-            Caption(j.state?.label("headline")?:"")
-            j.requests.forEach { r->
-                HorizontalDivider()
-                Text(r.label("item"))
-                Caption("${j.name(r.optString("fromVehicleId"))} → ${j.name(r.optString("toVehicleId"))}")
-                Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    SecondaryAction("할 일에 추가",j.editable) { scope.launch { j.addRequest(r.optString("id")) } }
-                    TextButton(onClick={scope.launch { j.removeRequest(r.optString("id")) }},enabled=j.editable) { Text("삭제") }
+    when(screen) {
+        0->{
+            val left:@Composable ColumnScope.()->Unit={
+                Row(Modifier.fillMaxWidth().padding(vertical=22.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text("${j.groupName}과\n함께 이동하고 있어요.",Modifier.weight(1f),style=MaterialTheme.typography.headlineLarge)
+                    Image(painterResource(R.drawable.mvp_camping),"캠핑 텐트",Modifier.size(112.dp))
+                }
+                Panel(Modifier.fillMaxWidth()) {
+                    Caption("그룹 차량")
+                    j.vehicles.forEach { v->VehicleRow(j,v) { selected=v.optString("id");screen=1 } }
+                    if(j.vehicles.isEmpty()) Caption("연결 후 차량 현황이 표시돼요")
+                }
+                Panel(Modifier.fillMaxWidth().clickable { screen=2 }) {
+                    Row(Modifier.fillMaxWidth()) { Caption("그룹 브리핑");Spacer(Modifier.weight(1f));Caption("● · ·") }
+                    Text(j.state?.label("headline")?:"그룹 소식을 기다리고 있어요",style=MaterialTheme.typography.titleLarge)
+                    Caption(j.state?.label("relativeTime")?:"")
                 }
             }
-        }
-    }
-    if(wide) Row(horizontalArrangement=Arrangement.spacedBy(20.dp)) {
-        Column(Modifier.weight(1f)) { details() };Column(Modifier.weight(1f)) { briefing() }
-    } else { details();briefing() }
-    JourneyTodos(j,vehicle?.optString("id")?:j.vehicleId)
-    Panel(Modifier.fillMaxWidth()) {
-        Text("가는 길에 알려주세요",style=MaterialTheme.typography.titleLarge)
-        OutlinedTextField(memo,{memo=it.take(500)},modifier=Modifier.fillMaxWidth(),
-            label={Text("휴게소 방문이나 구매할 물건을 남겨요")},minLines=2)
-        PrimaryAction("그룹에 보내기",j.editable && memo.isNotBlank()) {
-            scope.launch { if(j.memo(memo))memo="" }
-        }
-        j.memos.takeLast(4).reversed().forEach { m->
-            Caption(j.name(m.optString("vehicleId")))
-            Text(m.label("text"))
-        }
-    }
-    Panel(Modifier.fillMaxWidth(),emphasis=true) {
-        Text("도착하면, 편안한 캠핑으로",style=MaterialTheme.typography.titleLarge)
-        Caption("내 차량 도착과 주차를 확인한 뒤 캠핑장과 할 일을 이어가요. 차량 설정은 자동으로 바뀌지 않아요.")
-        PrimaryAction("도착 · 캠핑으로 이어가기",j.arrived && s.parkingState.allowsControl && !s.busy) {
-            if(j.enterCamp(s))onArrived()
-        }
-    }
-    if(connection) AlertDialog(onDismissRequest={connection=false},title={Text("그룹 연결")},
-        text={
-            Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(address,{address=it},label={Text("공유 서버 주소")},singleLine=true)
-                Caption("에뮬레이터: http://10.0.2.2:8787 · 외부 서버: HTTPS")
-                Text("내 차량")
-                j.vehicles.forEach { v->
-                    FilterChip(selected=j.vehicleId==v.optString("id"),onClick={j.selectVehicle(v.optString("id"))},
-                        label={Text(v.label("name"))})
-                }
-                Caption(j.message)
+            if(wide) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(28.dp)) {
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(24.dp),content=left)
+                Column(Modifier.weight(1.05f)) { JourneyMap(openOriginal) }
+            } else { Column(verticalArrangement=Arrangement.spacedBy(24.dp),content=left);JourneyMap(openOriginal) }
+            Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                TextButton(onClick={connection=true}) { Text("그룹 연결") }
+                PrimaryAction("도착 · 캠핑으로",j.arrived && s.parkingState.allowsControl && !s.busy) { if(j.enterCamp(s))onArrived() }
             }
-        },confirmButton={TextButton(onClick={if(j.connect(address)){connection=false;scope.launch { j.refresh() }}}) { Text("연결") }},
-        dismissButton={TextButton(onClick={connection=false}) { Text("닫기") }})
+        }
+        1->{
+            val list:@Composable ()->Unit={Panel(Modifier.fillMaxWidth().heightIn(min=650.dp)) {
+                j.vehicles.forEach { v->VehicleRow(j,v,vehicle?.optString("id")==v.optString("id")) { selected=v.optString("id") } }
+            }}
+            val detail:@Composable ()->Unit={
+                Panel(Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Avatar(vehicle?.optString("id").orEmpty(),Modifier.size(80.dp))
+                        Column { Caption("현재 상태");Text(vehicle?.label("status")?:"—",style=MaterialTheme.typography.headlineMedium) }
+                        Column(Modifier.weight(1f)) { Caption("현재 위치");Text(vehicle?.label("location")?:"—");Caption("예상 도착");Text(vehicle?.label("eta")?:"—") }
+                        Column { Caption("남은 거리");Text(vehicle?.label("distance")?:"—");Caption("배터리");Text("${vehicle?.label("battery")?:"—"}%") }
+                    }
+                }
+                JourneyTodos(j,vehicle?.optString("id")?:j.vehicleId,Modifier.heightIn(min=430.dp))
+            }
+            if(wide) Row(horizontalArrangement=Arrangement.spacedBy(28.dp)) {
+                Column(Modifier.weight(.7f)) { list() }
+                Column(Modifier.weight(1.5f),verticalArrangement=Arrangement.spacedBy(24.dp)) { detail() }
+            } else { list();detail() }
+        }
+        2->{
+            val requests:@Composable ()->Unit={
+                Panel(Modifier.fillMaxWidth().heightIn(min=210.dp)) {
+                    Text("그룹 요약",style=MaterialTheme.typography.titleLarge)
+                    Text(j.state?.label("summary")?:"소식을 기다리고 있어요")
+                }
+                Panel(Modifier.fillMaxWidth().heightIn(min=420.dp)) {
+                    Text("요청 내용",style=MaterialTheme.typography.titleLarge)
+                    j.requests.forEach { r->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                            .background(if(requestId==r.optString("id"))Color(0xFFEAF2FF) else Color(0xFFF7F7F8))
+                            .clickable { requestId=r.optString("id") }.padding(18.dp),
+                            verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                            Avatar(r.optString("fromVehicleId"));Text(r.label("item"))
+                        }
+                    }
+                    Spacer(Modifier.height(24.dp))
+                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                        SecondaryAction("TO-DO에 추가",j.editable && j.requests.any { it.optString("id")==requestId },Modifier.weight(1f)) { scope.launch { j.addRequest(requestId) } }
+                        SecondaryAction("삭제하기",j.editable && j.requests.any { it.optString("id")==requestId },Modifier.weight(1f)) { scope.launch { if(j.removeRequest(requestId))requestId="" } }
+                    }
+                }
+            }
+            val logs:@Composable ()->Unit={Panel(Modifier.fillMaxWidth().heightIn(min=654.dp)) {
+                Text("메모 입력 로그",style=MaterialTheme.typography.titleLarge)
+                j.memos.reversed().forEach { m->
+                    Row(Modifier.fillMaxWidth().padding(vertical=20.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                        Avatar(m.optString("vehicleId"))
+                        Column { Caption("${j.name(m.optString("vehicleId"))} · ${m.label("time")}");Text(m.label("text")) }
+                    }
+                    HorizontalDivider(color=CampLine)
+                }
+            }}
+            if(wide) Row(horizontalArrangement=Arrangement.spacedBy(28.dp)) {
+                Column(Modifier.weight(1.25f),verticalArrangement=Arrangement.spacedBy(24.dp)) { requests() }
+                Column(Modifier.weight(1f)) { logs() }
+            } else { requests();logs() }
+        }
+    }
+    if(composing) AlertDialog(onDismissRequest={composing=false},title={Text("그룹 메모")},text={
+        OutlinedTextField(memo,{memo=it.take(500)},label={Text("가는 길의 소식·구매 요청")})
+    },confirmButton={TextButton(onClick={scope.launch { if(j.memo(memo)){memo="";composing=false} }},enabled=j.editable&&memo.isNotBlank()) { Text("보내기") }},
+        dismissButton={TextButton(onClick=openOriginal) { Text("음성 앱 열기") }})
+    if(connection) AlertDialog(onDismissRequest={connection=false},title={Text("그룹 연결")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(address,{address=it},label={Text("공유 서버 주소")})
+            Caption("그룹 시연 서버 · 내 차량 선택")
+            j.vehicles.forEach { v->FilterChip(selected=j.vehicleId==v.optString("id"),onClick={j.selectVehicle(v.optString("id"))},label={Text(v.label("name"))}) }
+            Caption(j.message)
+        }
+    },confirmButton={TextButton(onClick={if(j.connect(address)){connection=false;scope.launch { j.refresh() }}}) { Text("연결") }})
 }
 
-@Composable private fun JourneyTodos(j:JourneySession,owner:String) {
+@Composable private fun JourneyMap(openOriginal:()->Unit) {
+    val context=LocalContext.current
+    var loading by remember { mutableStateOf(true) }
+    var failed by remember { mutableStateOf(false) }
+    val map=remember { WebView(context).apply {
+        layoutParams=android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT,android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+        settings.javaScriptEnabled=true
+        settings.allowFileAccess=false
+        settings.allowContentAccess=false
+        webViewClient=object:WebViewClient() {
+            override fun onPageFinished(view:WebView,url:String) { loading=false }
+            override fun onReceivedError(view:WebView,request:android.webkit.WebResourceRequest,error:android.webkit.WebResourceError) {
+                if(request.isForMainFrame) { failed=true;loading=false }
+            }
+            override fun shouldOverrideUrlLoading(view:WebView,request:android.webkit.WebResourceRequest):Boolean =
+                request.url.scheme!="https" || request.url.host!="www.openstreetmap.org"
+        }
+        loadUrl("https://www.openstreetmap.org/export/embed.html?bbox=128.82%2C37.72%2C128.96%2C37.84&layer=mapnik")
+    }}
+    LaunchedEffect(map,loading) {
+        if(loading) { kotlinx.coroutines.delay(15000);if(loading){failed=true;loading=false} }
+    }
+    DisposableEffect(map) { onDispose { map.stopLoading();map.destroy() } }
+    Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.fillMaxWidth().height(700.dp).clip(RoundedCornerShape(24.dp)).background(Color.White)) {
+            AndroidView(factory={map},modifier=Modifier.fillMaxSize())
+            if(loading || failed) Column(Modifier.align(Alignment.Center).background(Color.White).padding(24.dp),
+                horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(16.dp)) {
+                if(loading)CircularProgressIndicator()
+                Text(if(failed)"지도를 불러오지 못했어요" else "강릉 지도를 불러오고 있어요")
+                if(failed)SecondaryAction("다시 불러오기") { failed=false;loading=true;map.reload() }
+            }
+        }
+        Caption("강릉 주변 지도 · 차량 실시간 위치는 원본 지도에서 확인")
+        SecondaryAction("차량 위치·경로 열기",modifier=Modifier.fillMaxWidth(),action=openOriginal)
+    }
+}
+@Composable private fun JourneyTodos(j:JourneySession,owner:String,modifier:Modifier=Modifier) {
     val scope=rememberCoroutineScope()
-    Panel(Modifier.fillMaxWidth()) {
-        Text("${j.name(owner)}의 할 일",style=MaterialTheme.typography.titleLarge)
+    Panel(modifier.fillMaxWidth()) {
+        Text("TO-DO",style=MaterialTheme.typography.titleLarge)
         val todos=j.todos.filter { it.optString("ownerVehicleId")==owner }
         if(todos.isEmpty())Caption("등록된 할 일이 없어요")
         todos.forEach { t->
-            Row(Modifier.fillMaxWidth().heightIn(min=56.dp).toggleable(
-                value=t.optBoolean("done"),enabled=j.editable,role=Role.Checkbox,
-                onValueChange={done->scope.launch { j.completeTodo(t.optString("id"),done) }}),verticalAlignment=Alignment.CenterVertically) {
-                Checkbox(t.optBoolean("done"),onCheckedChange=null,enabled=j.editable)
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFF7F7F8)).heightIn(min=72.dp)
+                .toggleable(t.optBoolean("done"),enabled=j.editable,role=Role.Checkbox,onValueChange={done->scope.launch { j.completeTodo(t.optString("id"),done) }})
+                .padding(12.dp),verticalAlignment=Alignment.CenterVertically) {
+                Checkbox(t.optBoolean("done"),null,enabled=j.editable)
                 Text(t.label("title"),Modifier.weight(1f))
             }
         }
     }
 }
-
 @Composable internal fun JourneyCarryover(j:JourneySession,onJourney:()->Unit) {
     if(j.camping) {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {

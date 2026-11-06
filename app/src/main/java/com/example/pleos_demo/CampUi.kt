@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -91,18 +92,13 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     val rootPage=if(journey.camping || s.active) 0 else 4
     BackHandler(s.minimized || page!=rootPage) { if(s.minimized)s.updateMinimized(false) else page=rootPage }
     Surface(Modifier.fillMaxSize(),color=CampBackground) {
-        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFFAFCFF),Color(0xFFE8EDF6)))).safeDrawingPadding()) {
             val wide=maxWidth>=1080.dp
-            val padding=if(wide) 36.dp else 20.dp
+            val padding=if(wide) 56.dp else 24.dp
             Column(Modifier.fillMaxSize().padding(horizontal=padding,vertical=20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {
-                    Text("CAMP:ON",style=MaterialTheme.typography.headlineMedium)
-                    if(wide) {
-                        Spacer(Modifier.weight(1f))
-                        Caption(if(s.parkingState.allowsControl) "P  주차 중" else if(s.parkingState.allows(ControlKind.TEMPERATURE)) "공조 조절 가능" else "차량 조작 잠김")
-                        Caption(if(s.fresh && s.connected) "SDK 수신 중" else "연결 확인")
-                    } else Spacer(Modifier.weight(1f))
-                    Text("${s.soc.fmt()}%",style=MaterialTheme.typography.titleLarge)
+                    Text("CAMP:ON",style=MaterialTheme.typography.titleMedium,color=CampMuted)
+                    Spacer(Modifier.weight(1f))
                     TextButton(onClick={help=true},modifier=Modifier.heightIn(min=56.dp)) { Text("사용법") }
                     TextButton(onClick={settings=true},modifier=Modifier.heightIn(min=56.dp)) {
                         Text(if(s.isDemo) "시연 · 설정" else "Pleos · 설정")
@@ -111,8 +107,10 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                 if(!s.minimized) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                         listOf(4 to "함께 이동",0 to "캠핑 현황",1 to "에너지 계획",2 to "종료·귀가").forEach { (i,label)->
-                            FilterChip(selected=page==i,onClick={page=i},label={Text(label)},modifier=Modifier.heightIn(min=56.dp),
-                                shape=RoundedCornerShape(14.dp))
+                            TextButton(onClick={page=i},modifier=Modifier.heightIn(min=56.dp),
+                                colors=ButtonDefaults.textButtonColors(contentColor=if(page==i)CampInk else CampMuted)) {
+                                Text(if(page==i)"●  $label" else label)
+                            }
                         }
                         if(s.refreshing || s.busy) CircularProgressIndicator(Modifier.padding(16.dp).size(24.dp),strokeWidth=2.dp)
                     }

@@ -15,9 +15,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 internal val CampInk=Color(0xFF191F28)
-internal val CampMuted=Color(0xFF626D7C)
+internal val CampMuted=Color(0xFF6B717A)
 internal val CampAccent=Color(0xFF246BEB)
-internal val CampBackground=Color(0xFFF3F5F8)
+internal val CampBackground=Color(0xFFF7F9FC)
 internal val CampSurface=Color(0xFFFFFFFF)
 internal val CampLine=Color(0xFFE2E7EE)
 internal val CampWarning=Color(0xFF92510A)
@@ -40,8 +40,8 @@ private val CampTypography=Typography(
         outline=CampLine,error=CampWarning,onError=CampBackground),content=content)
 }
 @Composable internal fun Panel(modifier:Modifier=Modifier,emphasis:Boolean=false,content:@Composable ColumnScope.()->Unit) {
-    Column(modifier.background(if(emphasis) Color(0xFFEAF2FF) else CampSurface,RoundedCornerShape(24.dp))
-        .padding(24.dp),verticalArrangement=Arrangement.spacedBy(18.dp),content=content)
+    Column(modifier.background(CampSurface,RoundedCornerShape(24.dp))
+        .padding(32.dp),verticalArrangement=Arrangement.spacedBy(20.dp),content=content)
 }
 @Composable internal fun Caption(text:String) { Text(text,color=CampMuted,style=MaterialTheme.typography.bodySmall) }
 @Composable internal fun PrimaryAction(text:String,enabled:Boolean=true,modifier:Modifier=Modifier,action:()->Unit) {
@@ -49,5 +49,6 @@ private val CampTypography=Typography(
         contentPadding=PaddingValues(horizontal=24.dp,vertical=14.dp)) { Text(text) }
 }
 @Composable internal fun SecondaryAction(text:String,enabled:Boolean=true,modifier:Modifier=Modifier,action:()->Unit) {
-    OutlinedButton(action,modifier.heightIn(min=56.dp),enabled=enabled,shape=RoundedCornerShape(20.dp)) { Text(text) }
+    FilledTonalButton(action,modifier.heightIn(min=56.dp),enabled=enabled,shape=RoundedCornerShape(16.dp),
+        colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color(0xFFF0F1F3),contentColor=CampInk)) { Text(text) }
 }

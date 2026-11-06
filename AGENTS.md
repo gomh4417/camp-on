@@ -1,6 +1,7 @@
 # CAMP:ON project rules
 
 - Preserve existing Kotlin / Compose versions and single app module.
+- MVP_C screenshots are the controlling UI reference: preserve the home vehicle-list/briefing left column and large map right column; separate vehicle and briefing detail pages, reuse original avatar/tent assets, generous white panels on a very pale blue-gray background. Apply these shared tokens to camping, energy, departure and dialogs. Do not flatten the flow into one long form. Do not duplicate the Pleos system vehicle/sidebar or HVAC dock inside the app.
 - Korean UI and reports. Light, flat, friendly casual service: soft gray background, white cards, restrained blue accent, no glass/blur, heavy shadows, dark charcoal panels or 3D decorations. This project brief overrides solid-glass defaults. Use ui-ux-pro-max for hierarchy/accessibility. Preserve system insets.
 - Make the overhead cabin large, using available vertical space. Compose a separate transparent shell and independently selectable seat layers. Selection uses a flat pressed fill, outline and check, and opens the matching controls beside the map. Selecting a seat never actuates the vehicle. Explicit +/- or switch sends immediately; temperature slider sends once on release. Keep at least 56dp touch targets and responsive reflow.
 - Distinguish SDK acceptance, pending read-back and confirmed values; never display requested values as observed values. Mode batches retain explicit apply.
