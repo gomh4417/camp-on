@@ -1,3 +1,5 @@
+/services/group-sync/data/
+/services/group-sync/node_modules/
 /.idea/
 /.kotlin/
 **/graphify-out/

@@ -1,6 +1,8 @@
 # CAMP:ON
 
-개인 공모전용 차량 캠핑 앱. COOK·RELAX·SLEEP, 공조·조명·시트, 에너지 계획과 종료·귀가를 한 세션으로 연결합니다.
+개인 공모전용 차량 캠핑 앱. 함께 이동·그룹 브리핑·구매 할 일부터 도착 후 COOK·RELAX·SLEEP, 공조·조명·시트, 에너지 계획과 귀가까지 연결합니다.
+
+[MVP_C 통합 범위·서버 실행·사용법](docs/group-journey.md). 원본 Android 소스가 없어 지도·음성은 원본 APK를 연결해 엽니다.
 
 ## 실행
 
@@ -16,7 +18,9 @@ Pleos 에뮬레이터는 `adb forward tcp:8088 tcp:8088` 후 브라우저에서 
 ## 구현
 
 - CampDesign: 라이트 테마·플랫한 흰 카드·블루 포인트·Pretendard.
-- CampUi: 이미지 카드 중심 홈, 에너지 계획·상세, 종료·귀가, 취침 최소화.
+- JourneySession / JourneyUi: MVP_C 서버 호환 그룹 현황·메모·요청·할 일, 도착 후 캠핑 연결.
+- services/group-sync: Part_C 원본 호환 로컬 공유 서버.
+- CampUi: 함께 이동, 이미지 카드 중심 홈, 에너지 계획·상세, 종료·귀가, 취침 최소화.
 - CabinMap / VehicleEnvironment: 큰 차체 + 좌석별 독립 레이어, 선택 표시와 연결된 온도 슬라이더·제어. 전송·반영 대기·현재값 분리.
 - PleosGuide: 앱 내부 실행·연결·온도 변경 안내.
 - CampSession: 공유 상태, 영속 프리셋/계획/결과, 조건부 복원, 수신 이력.

@@ -74,7 +74,9 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
 }
 @Composable private fun CampContent(s:CampSession,switchSource:(Boolean)->Unit) {
     val scope=rememberCoroutineScope()
-    var page by rememberSaveable { mutableIntStateOf(0) }
+    val context=LocalContext.current
+    val journey=remember { JourneySession(context) }
+    var page by rememberSaveable { mutableIntStateOf(if(journey.camping || s.active) 0 else 4) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var help by rememberSaveable { mutableStateOf(false) }
     var editor by rememberSaveable { mutableIntStateOf(-1) }
@@ -83,9 +85,11 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     val lifecycle=LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(s,lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
         launch { while(true) { s.refresh();delay(5000) } }
+        launch { while(true) { journey.refresh();delay(1500) } }
         launch { while(true) { s.now=System.currentTimeMillis();s.refreshParking();delay(2000) } }
     } }
-    BackHandler(s.minimized || page!=0) { if(s.minimized)s.updateMinimized(false) else page=0 }
+    val rootPage=if(journey.camping || s.active) 0 else 4
+    BackHandler(s.minimized || page!=rootPage) { if(s.minimized)s.updateMinimized(false) else page=rootPage }
     Surface(Modifier.fillMaxSize(),color=CampBackground) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val wide=maxWidth>=1080.dp
@@ -106,7 +110,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                 }
                 if(!s.minimized) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                        listOf("캠핑 현황","에너지 계획","종료·귀가").forEachIndexed { i,label->
+                        listOf(4 to "함께 이동",0 to "캠핑 현황",1 to "에너지 계획",2 to "종료·귀가").forEach { (i,label)->
                             FilterChip(selected=page==i,onClick={page=i},label={Text(label)},modifier=Modifier.heightIn(min=56.dp),
                                 shape=RoundedCornerShape(14.dp))
                         }
@@ -114,13 +118,17 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                     }
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-                    WarningCard(s,{page=1;s.updateMinimized(false)},{page=2;s.updateMinimized(false)})
-                    if(s.message.isNotBlank()) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    if(page!=4) WarningCard(s,{page=1;s.updateMinimized(false)},{page=2;s.updateMinimized(false)})
+                    if(page!=4 && s.message.isNotBlank()) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                         Text(s.message,Modifier.weight(1f),color=CampAccent)
                         TextButton(onClick={s.message=""}) { Text("닫기") }
                     }
                     if(s.minimized) SleepScreen(s) else when(page) {
-                        0->Dashboard(s,wide,{confirm="start"},{editor=it},{presetDialog=true},{page=1},{page=3},{confirm="apply"})
+                        0->{
+                            JourneyCarryover(journey) { page=4 }
+                            Dashboard(s,wide,{confirm="start"},{editor=it},{presetDialog=true},{page=1},{page=3},{confirm="apply"})
+                        }
+                        4->JourneyScreen(journey,s,wide) { page=0 }
                         1->PlanScreen(s,wide,{page=3})
                         2->DepartureScreen(s,wide,{confirm="end"},{confirm="manual"},{page=1})
                         3->EnergyDetail(s) { page=1 }
@@ -128,8 +136,8 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                     Spacer(Modifier.height(16.dp))
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                    Caption(if(s.active) "${s.mode.name} · ${s.modeStatus}" else "캠핑 준비")
-                    Caption("${s.reading.source.takeIf { s.reading.time>0 }?:"수신 대기"} · ${stamp(s.reading.time)}")
+                    Caption(if(page==4) "함께 이동 · 그룹 현황" else if(s.active) "${s.mode.name} · ${s.modeStatus}" else "캠핑 준비")
+                    Caption(if(page==4) "그룹 서버 · ${stamp(journey.receivedAt)}" else "${s.reading.source.takeIf { s.reading.time>0 }?:"수신 대기"} · ${stamp(s.reading.time)}")
                 }
             }
         }
