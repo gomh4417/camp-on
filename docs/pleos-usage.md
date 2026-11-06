@@ -1,40 +1,29 @@
 # Pleos 화면과 CAMP:ON 사용법
 
-## 두 창의 역할
-
-- Android Studio Running Device: Pleos Android 에뮬레이터 화면. CAMP:ON, 기본 차량 UI, 하단 공조 바가 실행된다.
-- PC 웹 Virtual Console: 가상 차량 상태와 입력을 생성하는 테스트 도구. 앱 화면 자체가 아니다.
-- 앱 → Pleos SDK → 차량 서비스/시뮬레이터 → 실제 상태 재조회가 연결되어야 양쪽 표시가 바뀐다.
-- SDK가 조회 응답을 주는 것과 콘솔의 browser.active/emulator_active는 다르다. 콘솔 비활성 상태에서도 기존 값이 조회될 수 있다.
+## 두 창
+- Running Device: Pleos Android와 CAMP:ON이 실행되는 화면. 하단 공조 바도 여기에 있다.
+- 웹 Virtual Console: 가상 차량 상태·입력 생성 도구. 앱 화면이 아니다.
+- SDK 조회 성공과 콘솔 활성 상태는 다르다. 콘솔 비활성 중에도 이전 값이 조회될 수 있다.
 
 ## 온도 변경
+1. 에뮬레이터 실행, `adb forward tcp:8088 tcp:8088`.
+2. PC의 http://127.0.0.1:8088/ 탭을 활성 상태로 유지한다.
+3. 홈 탑뷰의 운전석·동승석 +/-를 누른다. 별도 좌석 선택·적용·캠핑 시작 없이 해당 값만 전송한다.
+4. ‘반영 대기’는 SDK 전송 후 실제값을 기다리는 상태다. 요청값으로 현재값을 덮지 않는다. 자동 재전송도 하지 않는다.
+5. 공조 전원이 꺼졌으면 공조 조절 화면에서 켠다. 웹 Climate → Target Temperature와 같은 좌석을 비교한다.
+6. 실내 온도는 센서값이며 목표 온도 변경과 동시에 바뀌지 않는다.
+7. 변경 전 값은 저장되며 종료·귀가 화면에서 복원할 수 있다.
 
-1. Pleos 에뮬레이터 실행, `adb forward tcp:8088 tcp:8088`.
-2. PC에서 http://127.0.0.1:8088/ 탭을 활성화하고 필요하면 새로고침한다. 백그라운드 탭 절전 등으로 heartbeat가 끊기면 콘솔은 비활성화될 수 있다.
-3. 주차 P, 공조 전원 ON 확인.
-4. CAMP:ON 홈의 공조 이미지 카드 → 운전석 또는 동승석 선택.
-5. + / −는 변경 예정값 편집이다. 사진 위 배지는 계속 차량 현재값을 표시한다.
-6. 화면 하단 고정 ‘차량에 적용’. 캠핑 시작 전에는 ‘캠핑 시작·적용’으로 진입값 저장과 명시적 적용을 진행한다.
-7. 적용 확인, 현재값, 하단 차량 공조 바의 같은 좌석을 비교한다. 웹에서는 Climate → Target Temperature → 같은 좌석.
-8. 실내 온도는 목표 온도와 다른 센서값이며 동시에 변하지 않는다.
+콘솔이 비활성이면 탭을 활성화/새로고침하고 ‘상태 확인’을 누른다. 실제값이 늦게 도착해도 정기 조회에서 결과를 갱신한다. 이전 요청이 대기 중이면 중복 제어·복원을 보류한다.
 
-실패한 항목은 편집값과 결과가 남는다. 성공 항목은 변경 예정값을 해제하고 재조회된 현재값을 표시한다. 다른 좌석/모드 기본값을 함께 쓰지 않는다.
-
-## 내 차량이 움직이지 않을 때
-
-- 이번 조사 시 기어 Park, 속도 0, 가속 0, 입력 비활성, browser.active=false였다.
-- Motion → Gear Selection에서 P/R/N/D 상태를 설정한다. D 선택만으로 자동 가속되는 것은 아니다.
-- 지원되는 콘솔 가속/주행 입력을 사용해야 한다. 이번 세션에서는 브라우저 URL 정책 검사로 직접 콘솔 UI를 읽거나 조작할 수 없어 정확한 키보드 단축키나 입력 장치 매핑은 확인하지 못했다. 임의의 키를 안내하지 않는다.
-- 주변 교통 애니메이션은 내 차량 데이터 연결의 증거가 아니다. 속도·기어·가속 입력 상태로 확인한다.
-- 주행 상태에서 CAMP:ON 물리 제어는 잠긴다. 다시 P로 돌아와 조절한다.
-- 테스트 도구 주행 조작을 캠핑 앱 기능으로 추가하지 않았다.
-
-## 이번 확인 범위
-
-새 홈/공조 제어창은 Pleos Running Device에서 표시를 확인했다. 현재 22°C와 기존 변경 예정 23.5°C, 고정 적용 버튼을 구분해 표시한다.
-이번 변경 뒤 실제 SDK 쓰기 재확인은 콘솔 재활성화 대기 상태다. 이전 버전의 성공 기록을 이번 확인 결과로 사용하지 않는다.
+## 주행
+- 공조의 앱 내부 P 전용 제한을 해제했다. 알려진 기어·최신값·Pleos 조작 허용이 모두 필요하다.
+- 시스템의 주행 중 화면 제한은 우회하지 않는다. 차량/지역별 제한이나 DO 정책으로 차단될 수 있다.
+- 시트·조명·모드 일괄 적용·복원은 P에서만 가능하다.
+- Motion → Gear Selection에서 D 선택만으로 가속되는 것은 아니다. 콘솔이 지원하는 주행 입력이 필요하다.
+- 주변 차량 애니메이션과 내 차량 속도는 별개다. 정확한 콘솔 키보드 매핑 및 실제 주행 중 UI 허용은 미확인이다.
 
 ## 공식 문서
-
-- [Virtual Console 셋업](https://document.pleos.ai/docs/connect/guide/getting-started/application-development/use-vehicle-emulator)
-- [도메인별 조작](https://document.pleos.ai/docs/pleos-only/app-test-guide/virtual-console-guide)
+- [Virtual Console](https://document.pleos.ai/docs/pleos-only/app-test-guide/virtual-console-guide)
+- [주행 제한 정책](https://document.pleos.ai/docs/pleos-only/vehicle-app-planning-guide/driving-restiction-policy)
+- [주행 제한 개발](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/driving-restriction-development-guide)

@@ -61,6 +61,9 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     var createdAt by mutableLongStateOf(saved.optLong("createdAt",now))
     val isDemo get()=source is DemoVehicleSource
     val fresh get()=reading.time>0 && now-reading.time in 0 until 30_000
+    fun awaiting(id:String)=results[id] in setOf("요청 중","전송됨 · 반영 대기","응답 확인 필요","실패 · 차량 반영 확인 필요","실패 · 응답 시간 초과","복원 보류 · 이전 요청 응답 대기") && written.containsKey(id)
+    private fun restoring(id:String)=results[id] in setOf("복원 요청 중","복원 응답 확인 필요","복원 반영 대기","복원 응답 시간 초과")
+    fun canAdjust(c:VehicleControl)=fresh && reading.isFresh(c.id,now) && current[c.id]!=null && connected && c.writable && parkingState.allows(c.kind) && !busy && !refreshing && !awaiting(c.id) && !restoring(c.id)
     val canControl get()=fresh && connected && parkingState.allowsControl && !busy && !refreshing
     val capacityKwh get()=if(fields["capacity"].isNullOrBlank()) reading.nominalCapacityKwh.takeIf { fresh && reading.isFresh("차량 공칭 용량",now) } else number("capacity")
     val soc get()=reading.soc.takeIf { fresh && reading.isFresh("배터리",now) }
@@ -202,6 +205,21 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         catch(e:CancellationException) { throw e }
         catch(e:Exception) { connectionError="차량 연결을 확인하세요";reading=VehicleReading(time=0);Log.w("CampSession","Read failed",e) }
         now=System.currentTimeMillis();changed()
+        var reconciled=false
+        written.toMap().forEach { (id,target)->
+            if(restoring(id) && reading.isFresh(id,now) && canRestore(current[id],initial[id])) {
+                written.remove(id);results[id]="복원 확인";reconciled=true
+            }
+            if(awaiting(id) && reading.isFresh(id,now) && canRestore(current[id],target)) {
+                results[id]="요청값 수신 확인"
+                if(overrides[id]==target) overrides.remove(id)
+                reconciled=true
+            }
+        }
+        if(reconciled) {
+            modeStatus=if(written.keys.any { awaiting(it) }) "일부 반영 대기" else "차량값 확인 완료"
+            message=modeStatus;save()
+        }
         soc?.let { value->
             val last=history.lastOrNull()
             if(last==null || now-last.time>=60_000 || abs(last.soc-value)>=.1) {
@@ -212,13 +230,15 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         }
     }
     suspend fun start() {
-        if(active || busy || written.isNotEmpty())return
+        if(active || busy)return
         busy=true
         try { mutex.withLock {
             readLatest()
             if(!parkingState.allowsControl || !fresh) { message="주차 상태와 연결을 확인하세요";return@withLock }
             if(!endValid()) { message="종료 예정 시각을 설정하세요";return@withLock }
-            initial.clear();initial.putAll(current.filterKeys { reading.isFresh(it,now) });results.clear();checks.clear()
+            if(written.isEmpty()) { initial.clear();results.clear() }
+            current.filterKeys { reading.isFresh(it,now) }.forEach { (id,value)->if(id !in initial) initial[id]=value }
+            checks.clear()
             equipmentIds.forEach { edited["hours$it"]=now }
             createdAt=now;active=true;modeStatus="적용 전";message="캠핑을 시작했습니다";save()
         } } finally { busy=false }
@@ -228,7 +248,8 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         check(withContext(Dispatchers.IO) { prefs.edit().putString("session",json).commit() }) { "변경 기록 저장 실패" }
     }
     private suspend fun applyOne(c:VehicleControl,value:Double) {
-        check(source.parking().allowsControl) { "주차 상태 확인 필요" }
+        check(source.parking().allows(c.kind)) { "차량 조작 제한 또는 상태 확인 필요" }
+        check(!awaiting(c.id) && !restoring(c.id)) { "이전 요청의 차량 응답을 기다리는 중입니다" }
         val before=source.readControl(c.id)
         check(before!=null && before.isFinite()) { "현재 값 확인 불가" }
         if(canRestore(before,value)) { results[c.id]="설정 유지";return }
@@ -239,7 +260,27 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
             if(canRestore(source.readControl(c.id),value)) { results[c.id]="적용 확인";save();return }
             delay(250)
         }
-        error("차량 반영 확인 필요")
+        results[c.id]="전송됨 · 반영 대기";save()
+    }
+    suspend fun applyDirect(c:VehicleControl,value:Double) {
+        if(!canAdjust(c))return
+        busy=true
+        try { mutex.withLock {
+            readLatest()
+            check(fresh && reading.isFresh(c.id,now)) { "최신 차량값 확인 필요" }
+            val latest=reading.controls.firstOrNull { it.id==c.id && it.writable }?:error("지원하지 않는 제어")
+            applyOne(latest,normalized(latest,value))
+            readLatest()
+            modeStatus=if(written.keys.any { awaiting(it) || restoring(it) }) "차량 반영 대기" else "개별 설정 확인"
+            message=if(awaiting(c.id)) "전송 완료 · 차량 응답 대기 / 콘솔 연결 확인" else "${c.kind.title} · ${results[c.id]}"
+        } } catch(e:TimeoutCancellationException) {
+            results[c.id]=if(c.id in written) "응답 확인 필요" else "실패 · 응답 시간 초과"
+            message="차량 응답 확인 필요"
+        } catch(e:CancellationException) { throw e }
+        catch(e:Exception) {
+            results[c.id]="실패 · "+(e.message?:"차량 연결 확인").take(80);message=results[c.id].orEmpty()
+            Log.w("CampSession","Direct ${c.id}",e)
+        } finally { busy=false;save() }
     }
     suspend fun applyMode(onlyEdited:Boolean=false) {
         if(!active || !canControl)return
@@ -259,8 +300,9 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
                     else->it.kind.ordinal
                 }
             }
-            controls.forEach { results[it.id]="대기" }
+            controls.filterNot { awaiting(it.id) || restoring(it.id) }.forEach { results[it.id]="대기" }
             for(c in controls) {
+                if(awaiting(c.id) || restoring(c.id))continue
                 try { applyOne(c,targets.getValue(c.id)) }
                 catch(e:TimeoutCancellationException) { results[c.id]="실패 · 응답 시간 초과" }
                 catch(e:CancellationException) { throw e }
@@ -268,15 +310,15 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
                 save()
             }
             readLatest()
-            controls.filter { results[it.id] in listOf("적용 확인","설정 유지") }.forEach { c ->
+            controls.filter { results[it.id] in listOf("적용 확인","설정 유지","요청값 수신 확인") }.forEach { c ->
                 if(!canRestore(current[c.id],targets[c.id]?:Double.NaN)) results[c.id]="실패 · 최종 값 확인 필요"
             }
-            val success=controls.isNotEmpty() && controls.all { results[it.id] in listOf("적용 확인","설정 유지") }
-            controls.filter { results[it.id] in listOf("적용 확인","설정 유지") }.forEach { c->
+            val success=controls.isNotEmpty() && controls.all { results[it.id] in listOf("적용 확인","설정 유지","요청값 수신 확인") }
+            controls.filter { results[it.id] in listOf("적용 확인","설정 유지","요청값 수신 확인") }.forEach { c->
                 if(overrides[c.id]==targets[c.id]) overrides.remove(c.id)
             }
             if(success && !onlyEdited) mode=selectedMode
-            modeStatus=if(success) { if(onlyEdited) "개별 설정 적용" else "적용 완료" } else "일부 적용 · 확인 필요"
+            modeStatus=if(success) { if(onlyEdited) "개별 설정 적용" else "적용 완료" } else if(controls.any { awaiting(it.id) }) "차량 반영 대기" else "일부 적용 · 확인 필요"
             message=modeStatus
             save()
         } } finally { busy=false;save() }
@@ -294,20 +336,22 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
             for((id,value) in pending) {
                 try {
                     check(source.parking().allowsControl) { "주차 상태 확인 필요" }
+                    if(awaiting(id)) { results[id]="복원 보류 · 이전 요청 응답 대기";save();continue }
                     val actual=source.readControl(id)
                     if(actual==null) { results[id]="현재 값 확인 필요";continue }
                     val original=initial[id]?:error("시작 값 없음")
                     if(canRestore(actual,original)) { written.remove(id);results[id]="복원 확인";save();continue }
+                    if(restoring(id)) { results[id]="복원 반영 대기";save();continue }
                     if(!canRestore(actual,value)) { results[id]="수동 변경 유지";continue }
                     results[id]="복원 요청 중";persistBeforeWrite()
                     source.writeControl(id,original)
                     var confirmed=false
                     repeat(8) { if(!confirmed) { confirmed=canRestore(source.readControl(id),original);if(!confirmed)delay(250) } }
-                    check(confirmed) { "복원 응답 확인 필요" }
-                    written.remove(id);results[id]="복원 확인"
+                    if(confirmed) { written.remove(id);results[id]="복원 확인" }
+                    else results[id]="복원 반영 대기"
                 } catch(e:TimeoutCancellationException) { results[id]="복원 응답 시간 초과" }
                 catch(e:CancellationException) { throw e }
-                catch(e:Exception) { results[id]="복원 실패 · 확인 필요";Log.w("CampSession","Restore $id",e) }
+                catch(e:Exception) { results[id]=if(restoring(id)) "복원 응답 확인 필요" else "복원 실패 · 확인 필요";Log.w("CampSession","Restore $id",e) }
                 save()
             }
             readLatest();message=if(written.isEmpty()) "설정 복원 완료" else "남은 항목을 확인하세요";save()
@@ -315,7 +359,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     }
     fun acknowledgeManualRestore() { if(busy)return;written.keys.toList().forEach { results[it]="직접 확인 완료" };written.clear();save() }
     suspend fun endAndRestore() {
-        if(!active || !canControl)return
+        if((!active && written.isEmpty()) || !canControl)return
         if(written.isNotEmpty())restore()
         if(written.isEmpty())finish()
     }

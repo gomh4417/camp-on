@@ -12,6 +12,8 @@ class CampSessionTest {
         var failLight=true
         var parked=true
         var disconnected=false
+        var delayed=false
+        var unrestricted:Boolean?=null
         val controls=listOf(
             VehicleControl("temperature","온도",ControlKind.TEMPERATURE,16.0,32.0,.5,true),
             VehicleControl("light","조명",ControlKind.LIGHT,0.0,100.0,1.0,true))
@@ -19,13 +21,13 @@ class CampSessionTest {
             check(!disconnected) { "연결 끊김" }
             return VehicleReading(soc=80.0,charging=false,values=values.toMap(),controls=controls)
         }
-        override suspend fun parking()=ParkingState(parked,parked)
+        override suspend fun parking()=ParkingState(parked,unrestricted?:parked)
         override suspend fun readControl(id:String)=values[id]
         override suspend fun writeControl(id:String,value:Double) {
             writes++
             delay(30)
             if(id=="light" && failLight) error("조명 응답 실패")
-            values[id]=value
+            if(!delayed) values[id]=value
         }
         override fun close() {}
     }
@@ -100,6 +102,68 @@ class CampSessionTest {
             s.restore()
             assertEquals(24.0,vehicle.values.getValue("temperature"),0.0)
             assertTrue(s.written.isEmpty())
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+        Unit
+    }
+
+    @Test fun delayedDirectResponseSurvivesRestartWithoutDuplicateOrEarlyRestore()=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_delayed_${System.nanoTime()}"
+        val vehicle=VehicleFake().apply { delayed=true }
+        try {
+            val s=CampSession(context,vehicle,name)
+            s.refresh()
+            val temperature=vehicle.controls.first()
+            s.applyDirect(temperature,25.0)
+            assertFalse(s.active)
+            assertTrue(s.awaiting(temperature.id))
+            assertEquals(24.0,s.current.getValue(temperature.id),0.0)
+            s.applyDirect(temperature,26.0)
+            assertEquals(1,vehicle.writes)
+            val restarted=CampSession(context,vehicle,name)
+            restarted.refresh()
+            restarted.restore()
+            assertTrue(restarted.awaiting(temperature.id))
+            assertEquals(1,vehicle.writes)
+            assertEquals(25.0,restarted.written.getValue(temperature.id),0.0)
+            vehicle.values[temperature.id]=25.0
+            restarted.refresh()
+            assertFalse(restarted.awaiting(temperature.id))
+            assertEquals("요청값 수신 확인",restarted.results[temperature.id])
+            restarted.restore()
+            assertEquals("복원 반영 대기",restarted.results[temperature.id])
+            restarted.restore()
+            assertEquals(2,vehicle.writes)
+            val restoring=CampSession(context,vehicle,name)
+            vehicle.values[temperature.id]=24.0
+            restoring.refresh()
+            assertTrue(restoring.written.isEmpty())
+            assertEquals("복원 확인",restoring.results[temperature.id])
+            assertEquals(2,vehicle.writes)
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+        Unit
+    }
+
+    @Test fun drivingClimateRequiresPlatformPermission()=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_driving_${System.nanoTime()}"
+        val vehicle=VehicleFake().apply { parked=false;unrestricted=true }
+        try {
+            val s=CampSession(context,vehicle,name)
+            s.refresh()
+            assertFalse(s.canControl)
+            assertTrue(s.canAdjust(vehicle.controls.first()))
+            assertFalse(s.canAdjust(vehicle.controls.last()))
+            s.applyDirect(vehicle.controls.first(),25.0)
+            assertEquals(1,vehicle.writes)
+            vehicle.unrestricted=false
+            s.refresh()
+            s.applyDirect(vehicle.controls.first(),26.0)
+            assertEquals(1,vehicle.writes)
+            assertFalse(ParkingState(null,true).allows(ControlKind.TEMPERATURE))
+            assertFalse(ParkingState(false,null).allows(ControlKind.TEMPERATURE))
+            assertFalse(ParkingState(false,true,System.currentTimeMillis()-11_000).allows(ControlKind.TEMPERATURE))
+            assertFalse(ParkingState(false,true).allows(ControlKind.SEAT_POSITION))
         } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
         Unit
     }

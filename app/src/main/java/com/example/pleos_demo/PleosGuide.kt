@@ -19,14 +19,14 @@ import androidx.compose.ui.unit.dp
                 Text("PC의 127.0.0.1:8088에서 차량 상태·입력을 만듭니다. 탭을 활성 상태로 유지하세요. 앱에서 SDK 값이 읽혀도 콘솔 연결은 별도로 끊길 수 있습니다.")
                 HorizontalDivider()
                 Text("온도를 바꾸려면",style=MaterialTheme.typography.titleMedium)
-                Text("1. 주차 P 상태에서 공조 전원을 켭니다.\n2. 공조 이미지 → 운전석 또는 동승석 → + / −로 변경값을 만듭니다.\n3. 하단 ‘차량에 적용’을 누릅니다. 시작 전이면 ‘캠핑 시작·적용’을 누릅니다.\n4. ‘적용 확인’과 현재값을 확인합니다. 좌우 온도는 선택한 좌석별로 비교하세요.")
+                Text("1. 홈 탑뷰의 운전석·동승석 + / −를 누릅니다.\n2. 별도 적용이나 캠핑 시작 없이 해당 좌석으로 즉시 전송됩니다.\n3. 반영 대기 중에는 요청값을 따로 표시합니다. 현재값은 실제 차량 응답 후 바뀝니다.\n4. 공조 전원이 꺼져 있으면 공조 조절 화면에서 켭니다.")
                 Text("웹 콘솔에서는 Climate → Target Temperature의 같은 좌석을 확인합니다. 실내 온도는 센서값이라 목표 온도 변경과 동시에 바뀌지 않습니다.")
                 HorizontalDivider()
                 Text("내 차량 주행",style=MaterialTheme.typography.titleMedium)
                 Text("콘솔의 Motion → Gear Selection에서 기어 상태를 확인하세요. P와 속도 0에서는 정지합니다. D 전환 뒤에는 콘솔에서 지원하는 가속 입력이 필요합니다. 주변 차량 움직임은 내 차량의 속도와 별개입니다.")
-                Text("주행하면 CAMP:ON 제어는 잠깁니다. 공조·시트 조절 검토는 P로 돌아온 뒤 진행하세요.")
+                Text("공조는 차량 상태가 확인되고 Pleos가 조작을 허용할 때 사용할 수 있습니다. 시스템 주행 제한은 우회하지 않습니다. 시트 이동·조명·모드 일괄 적용·복원은 주차 P에서만 가능합니다.")
                 Text("반영되지 않을 때",style=MaterialTheme.typography.titleMedium)
-                Text("PC 콘솔 탭 새로고침 → 공조 전원 확인 → 같은 좌석 비교 → 카드 실패 메시지 확인 순서로 확인하세요. 실패한 요청을 성공값으로 표시하지 않습니다.")
+                Text("반영 대기는 실패와 다릅니다. PC 콘솔 탭을 활성화하고 공조 전원·같은 좌석을 확인하세요. 늦게 도착한 값도 자동 조회해 표시합니다. 기다리는 동안 같은 명령을 다시 보내지 않습니다. 변경한 설정은 종료·귀가 화면에서 복원할 수 있습니다.")
             }
         },confirmButton={TextButton(onClick=dismiss,modifier=Modifier.heightIn(min=56.dp)) { Text("확인") }})
 }

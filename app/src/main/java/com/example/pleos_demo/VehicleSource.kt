@@ -19,6 +19,8 @@ enum class ControlKind(val title: String, val unit: String) {
     POWER("공조 전원",""), TEMPERATURE("목표 온도","°C"), FAN("풍량","단"),
     AC("A/C",""), RECIRCULATION("내기순환",""), LIGHT("조명","%"), SEAT_TEMPERATURE("시트 열선·통풍","단"), SEAT_POSITION("시트 등받이",""), AUTO("자동 공조",""), DUAL("좌우 온도 연동",""), AIR_CLEANER("공기 청정",""), FAN_DIRECTION("바람 방향",""), DEFROSTER("성에 제거",""), CABIN_LIGHT("실내등",""), READING_LIGHT("독서등","")
 }
+internal fun ControlKind.isClimate()=this in setOf(ControlKind.POWER,ControlKind.TEMPERATURE,ControlKind.FAN,ControlKind.AC,
+    ControlKind.RECIRCULATION,ControlKind.AUTO,ControlKind.DUAL,ControlKind.AIR_CLEANER,ControlKind.FAN_DIRECTION,ControlKind.DEFROSTER)
 data class VehicleControl(val id: String, val label: String, val kind: ControlKind,
     val min: Double, val max: Double, val step: Double = 1.0, val writable: Boolean,
     val choices: Map<Double,String> = emptyMap(), val presetManaged: Boolean = true)
@@ -30,7 +32,9 @@ data class VehicleReading(val soc: Double?=null, val charging: Boolean?=null,
     fun isFresh(id: String, now: Long) = now - (observedAt[id] ?: time) in 0 until 30_000
 }
 data class ParkingState(val parked: Boolean?, val unrestricted: Boolean?, val time: Long=System.currentTimeMillis()) {
-    val allowsControl get() = parked == true && unrestricted == true && System.currentTimeMillis()-time < 10_000
+    private val fresh get()=System.currentTimeMillis()-time in 0 until 10_000
+    val allowsControl get() = parked == true && unrestricted == true && fresh
+    fun allows(kind:ControlKind)=fresh && unrestricted==true && parked!=null && (kind.isClimate() || parked==true)
 }
 interface VehicleSource {
     suspend fun read(): VehicleReading
@@ -286,8 +290,8 @@ class PleosVehicleSource(context: Context) : VehicleSource {
     override suspend fun parking() = gate.read()
     override suspend fun readControl(id:String) = bindings[id]?.read?.invoke()
     override suspend fun writeControl(id:String,value:Double) {
-        check(parking().allowsControl) { "주차 상태에서 조작할 수 있습니다" }
         val binding=bindings[id] ?: error("지원하지 않는 기능")
+        check(parking().allows(binding.control.kind)) { "차량 조작 제한 또는 상태 확인 필요" }
         check(binding.control.writable) { "읽기 전용 기능" }
         require(value.isFinite() && value in binding.control.min..binding.control.max) { "지원 범위를 벗어난 값" }
         val steps=(value-binding.control.min)/binding.control.step

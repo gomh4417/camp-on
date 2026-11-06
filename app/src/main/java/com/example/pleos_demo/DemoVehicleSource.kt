@@ -38,8 +38,8 @@ class DemoVehicleSource(context: Context) : VehicleSource {
         return values[id]
     }
     override suspend fun writeControl(id: String, value: Double) {
-        check(parking().allowsControl) { "주차 상태 확인 필요" }
         val c = controls.first { it.id == id }
+        check(parking().allows(c.kind)) { "차량 조작 제한 또는 상태 확인 필요" }
         require(value.isFinite() && value in c.min..c.max)
         delay(200)
         check(!(scenario == "일부 실패" && c.kind == ControlKind.LIGHT)) { "조명 응답 없음" }

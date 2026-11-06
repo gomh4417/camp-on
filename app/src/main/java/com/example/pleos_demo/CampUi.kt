@@ -95,7 +95,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                     Text("CAMP:ON",style=MaterialTheme.typography.headlineMedium)
                     if(wide) {
                         Spacer(Modifier.weight(1f))
-                        Caption(if(s.parkingState.allowsControl) "P  주차 중" else "차량 조작 잠김")
+                        Caption(if(s.parkingState.allowsControl) "P  주차 중" else if(s.parkingState.allows(ControlKind.TEMPERATURE)) "공조 조절 가능" else "차량 조작 잠김")
                         Caption(if(s.fresh && s.connected) "SDK 수신 중" else "연결 확인")
                     } else Spacer(Modifier.weight(1f))
                     Text("${s.soc.fmt()}%",style=MaterialTheme.typography.titleLarge)
@@ -189,7 +189,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
             Caption("STAY A LITTLE LONGER")
             Text(if(s.active) s.mode.subtitle else "오늘의 쉼을 켜세요",style=MaterialTheme.typography.headlineLarge)
         }
-        if(!s.active) PrimaryAction("캠핑 시작",s.canControl && s.written.isEmpty(),action=start)
+        if(!s.active) PrimaryAction("캠핑 시작",s.canControl,action=start)
         else if(s.mode==CampMode.SLEEP) SecondaryAction("화면 최소화") { s.updateMinimized(true) }
     }
     Split(wide,left={
@@ -245,15 +245,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
 }
 @Composable private fun CabinPanel(s:CampSession,edit:(Int)->Unit,presets:()->Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CampSurface)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(3.6f)) {
-            Image(painterResource(R.drawable.cabin_clay),"흰색 클레이 스타일 SUV 실내",Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
-            Row(Modifier.align(Alignment.BottomStart).padding(20.dp).clip(RoundedCornerShape(12.dp))
-                .background(CampBackground.copy(alpha=.92f)).padding(horizontal=18.dp,vertical=12.dp),
-                horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-                Text("실내 ${s.reading.cabin.takeIf { s.fresh }.fmt()}°C")
-                Text(if(s.active) "${s.mode.label} 환경" else "차량 환경")
-            }
-        }
+        CabinPlan(s,s.reading.controls.filter { it.kind==ControlKind.TEMPERATURE },Modifier.fillMaxWidth())
         Column(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 listOf(ControlKind.TEMPERATURE,ControlKind.LIGHT,ControlKind.SEAT_POSITION).forEachIndexed { index,kind->
@@ -472,7 +464,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
             s.results.filterValues { it=="복원 확인" }.forEach { (id,result)->
                 LabelValue(s.reading.controls.find { it.id==id }?.label?:id,result)
             }
-            PrimaryAction(if(s.busy) "처리 중" else "종료·복원 확인",s.active && s.canControl,Modifier.fillMaxWidth(),end)
+            PrimaryAction(if(s.busy) "처리 중" else "종료·복원 확인",(s.active || s.written.isNotEmpty()) && s.canControl,Modifier.fillMaxWidth(),end)
             if(s.written.isNotEmpty()) TextButton(onClick=manual,enabled=!s.busy) { Text("차량에서 직접 복원 완료") }
         }
         Panel(Modifier.fillMaxWidth()) {
