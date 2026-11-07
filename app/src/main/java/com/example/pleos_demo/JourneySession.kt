@@ -87,7 +87,16 @@ internal class JourneySession(context:Context) {
                 connection.doOutput=true;connection.setRequestProperty("Content-Type","application/json; charset=utf-8")
                 connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
             }
-            check(connection.responseCode in 200..299) { "서버 응답 ${connection.responseCode}" }
+            if(connection.responseCode !in 200..299) {
+                val reason=when(connection.responseCode) {
+                    400 -> "초대 코드 숫자 4자리와 닉네임·차량명을 확인해 주세요"
+                    404 -> "해당 초대 코드의 그룹을 찾을 수 없어요"
+                    409 -> "이미 사용 중인 초대 코드예요. 다른 숫자 4자리를 정해 주세요"
+                    429 -> "요청이 많아요. 잠시 후 다시 시도해 주세요"
+                    else -> "서버 연결을 확인해 주세요"
+                }
+                throw GroupRequestException(reason)
+            }
             val bytes=connection.inputStream.use { it.readBytes() }
             check(bytes.size<=1_048_576) { "그룹 응답 크기 초과" }
             JSONObject(bytes.toString(Charsets.UTF_8))
@@ -98,13 +107,16 @@ internal class JourneySession(context:Context) {
         check(next.optJSONObject("group")!=null && next.optJSONArray("vehicles")!=null) { "그룹 응답 형식 확인 필요" }
         state=next;receivedAt=System.currentTimeMillis();error=""
     }
-    suspend fun join(code:String,nickname:String,model:String,groupName:String):Boolean {
-        if(busy || refreshing || nickname.isBlank() || model.isBlank()) { message="닉네임과 차량명을 입력하세요";return false }
-        val signature="$serverUrl|$code|$nickname|$model|$groupName"
+    private class GroupRequestException(message:String):Exception(message)
+    suspend fun join(code:String,nickname:String,model:String,groupName:String,createGroup:Boolean):Boolean {
+        if(busy || refreshing)return false
+        if(!Regex("[0-9]{4}").matches(code)) { message="초대 코드는 숫자 4자리로 입력해 주세요";return false }
+        if(nickname.isBlank() || model.isBlank()) { message="닉네임과 차량명을 입력하세요";return false }
+        val signature="$serverUrl|$createGroup|$code|$nickname|$model|$groupName"
         if(prefs.getString("enrollmentSignature","")!=signature) prefs.edit().putString("enrollmentSignature",signature).putString("enrollmentKey",java.util.UUID.randomUUID().toString()).apply()
         busy=true
         return try { mutex.withLock {
-            val result=request("POST",if(code.isBlank())"/api/groups" else "/api/join",JSONObject().put("code",code.trim()).put("nickname",nickname.trim()).put("model",model.trim()).put("name",groupName.trim().ifBlank { "$nickname 캠핑 그룹" }))
+            val result=request("POST",if(createGroup)"/api/groups" else "/api/join",JSONObject().put("code",code.trim()).put("nickname",nickname.trim()).put("model",model.trim()).put("name",groupName.trim().ifBlank { "$nickname 캠핑 그룹" }))
             val token=result.getString("token")
             check(token.isNotBlank())
             accept(result)
@@ -112,6 +124,7 @@ internal class JourneySession(context:Context) {
             prefs.edit().putString("token",token).putString("vehicle",vehicleId).putString("code",inviteCode).apply()
             message="그룹에 참여했어요 · ${vehicles.size}대";true
         } } catch(e:CancellationException) { throw e }
+        catch(e:GroupRequestException) { message=e.message.orEmpty();false }
         catch(_:Exception) { message="서버 주소와 초대 코드를 확인해 주세요";false }
         finally { busy=false }
     }

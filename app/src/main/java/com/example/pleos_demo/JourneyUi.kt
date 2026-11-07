@@ -7,6 +7,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -53,6 +55,7 @@ import org.json.JSONObject
     var selected by rememberSaveable { mutableStateOf(j.vehicleId) }
     var requestId by rememberSaveable { mutableStateOf("") }
     var connection by rememberSaveable { mutableStateOf(false) }
+    var createGroup by rememberSaveable { mutableStateOf(true) }
     var composing by rememberSaveable { mutableStateOf(false) }
     var address by rememberSaveable { mutableStateOf(j.serverUrl) }
     var inviteCode by rememberSaveable { mutableStateOf("") }
@@ -166,10 +169,19 @@ import org.json.JSONObject
         Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             if(!j.connected && j.inviteCode.isNotBlank()) SecondaryAction("내 그룹 다시 연결",!j.busy && !j.refreshing) { scope.launch { if(j.resumeMembership())connection=false } }
             OutlinedTextField(address,{address=it},label={Text("공유 서버 주소")})
-            OutlinedTextField(inviteCode,{inviteCode=it.take(20)},label={Text("초대 코드 · 비우면 새 그룹 만들기")})
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected=createGroup,onClick={createGroup=true},label={Text("새 그룹 만들기")},
+                    modifier=Modifier.heightIn(min=56.dp),enabled=!j.busy)
+                FilterChip(selected=!createGroup,onClick={createGroup=false},label={Text("코드로 참여")},
+                    modifier=Modifier.heightIn(min=56.dp),enabled=!j.busy)
+            }
+            OutlinedTextField(inviteCode,{if(it.length<=4 && it.all { digit->digit in '0'..'9' })inviteCode=it},
+                label={Text(if(createGroup)"초대 코드 정하기" else "받은 초대 코드")},
+                supportingText={Text("숫자 4자리 · 예: 0427")},singleLine=true,
+                keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
             OutlinedTextField(connectionName,{connectionName=it.take(30)},label={Text("내 닉네임")})
             OutlinedTextField(vehicleModel,{vehicleModel=it.take(60)},label={Text("내 차량명")})
-            if(inviteCode.isBlank())OutlinedTextField(groupTitle,{groupTitle=it.take(60)},label={Text("새 그룹 이름")})
+            if(createGroup)OutlinedTextField(groupTitle,{groupTitle=it.take(60)},label={Text("새 그룹 이름")})
             Caption("내 차량으로 참여합니다. 초대받은 사람이 연결해야 다른 차량이 추가돼요.")
             if(j.connected) {
                 Text("초대 코드 · ${j.inviteCode}")
@@ -186,12 +198,12 @@ import org.json.JSONObject
                     // Let an in-flight poll finish instead of dropping the user's tap.
                     while(j.refreshing) kotlinx.coroutines.delay(50)
                     if(j.connect(address)) {
-                        if(j.join(inviteCode,connectionName,vehicleModel,groupTitle))connection=false
+                        if(j.join(inviteCode,connectionName,vehicleModel,groupTitle,createGroup))connection=false
                     }
                 } finally { connecting=false }
             }
-        },enabled=!j.busy && !connecting,modifier=Modifier.heightIn(min=64.dp)) {
-            Text(if(connecting)"참여 중…" else if(inviteCode.isBlank())"내 차량으로 그룹 만들기" else "내 차량으로 참여")
+        },enabled=!j.busy && !connecting && inviteCode.length==4 && connectionName.isNotBlank() && vehicleModel.isNotBlank(),modifier=Modifier.heightIn(min=64.dp)) {
+            Text(if(connecting)"연결 중…" else if(createGroup)"내 차량으로 그룹 만들기" else "내 차량으로 참여")
         }
     })
 }

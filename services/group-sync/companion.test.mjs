@@ -21,7 +21,22 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
     try {
         await start();
         assert.equal((await api("/api/state")).status,401);
-        const a=(await api("/api/groups","POST",{name:"검증 그룹",nickname:"PC",model:"아이오닉 5",battery:80,destination:"캠핑장"})).data;
+        const registration={code:"0427",name:"검증 그룹",nickname:"PC",model:"아이오닉 5",battery:80,destination:"캠핑장"};
+        for(const code of [undefined,"","123","12345","12a4","１２３４"," 1234","1234 ","1234\n",1234]) {
+            assert.equal((await api("/api/groups","POST",{...registration,code})).status,400);
+            assert.equal((await api("/api/join","POST",{...registration,code})).status,400);
+        }
+        const a=(await api("/api/groups","POST",registration,undefined,"create-once")).data;
+        assert.equal(a.code,"0427");
+        const retry=await api("/api/groups","POST",registration,undefined,"create-once");
+        assert.equal(retry.status,200);assert.equal(retry.data.vehicleId,a.vehicleId);
+        assert.equal(retry.data.state.vehicles.length,1);
+        const collision=await api("/api/groups","POST",{...registration,name:"덮어쓰기 금지"},undefined,"different-create");
+        assert.equal(collision.status,409);assert.match(collision.data.error,/이미 사용 중/);
+        assert.equal((await api("/api/state","GET",undefined,a.token)).data.group.name,"검증 그룹");
+        const concurrent=await Promise.all(["one","two"].map(key=>api("/api/groups","POST",{...registration,code:"0000"},undefined,key)));
+        assert.deepEqual(concurrent.map(r=>r.status).sort(),[201,409]);
+        assert.equal(concurrent.find(r=>r.status===201).data.code,"0000");
         assert.equal(a.state.vehicles.length,1);
         assert.equal(a.state.memos.length,0);
         assert.equal(a.state.todos.length,0);
@@ -33,7 +48,7 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
         assert.equal((await api("/api/join","POST",{code:a.code,nickname:"실패",model:"EV",battery:101})).status,400);
         const b=(await api("/api/join","POST",{code:a.code,nickname:"민지",model:"EV6",battery:""})).data;
         const c=(await api("/api/join","POST",{code:a.code,nickname:"준호",model:"아이오닉 6",battery:65})).data;
-        assert.equal((await api("/api/join","POST",{code:"WRONG",vehicleId:"tralala"})).status,404);
+        assert.equal((await api("/api/join","POST",{code:"9999",nickname:"미가입",model:"EV"})).status,404);
         assert.equal((await api("/api/state","GET",undefined,c.token)).data.memberCount,3);
         assert.equal(b.state.vehicles.find(v=>v.id===b.vehicleId).battery,null);
         assert.equal((await api("/api/state","GET",undefined,a.token)).data.vehicles[0].status,"출발 대기");
@@ -60,9 +75,12 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
         assert.equal((await api("/api/todos/"+todo.id,"PATCH",{done:"false"},a.token)).status,400);
         assert.equal((await api("/api/group","PATCH",{destination:"다른 장소"},b.token)).status,403);
         await api("/api/group","PATCH",{destination:"솔향 캠핑장"},a.token);
-        const other=(await api("/api/groups","POST",{name:"다른 그룹",nickname:"다른 사람",model:"EV3"})).data;
+        const other=(await api("/api/groups","POST",{code:"9001",name:"다른 그룹",nickname:"다른 사람",model:"EV3"})).data;
         assert.equal((await api("/api/state","GET",undefined,other.token)).data.memos.length,0);
         await stop();await start();
+        assert.equal((await api("/api/groups","POST",registration)).status,409);
+        const rejoined=(await api("/api/join","POST",{code:"0427",nickname:"재시작 후",model:"EV"})).data;
+        assert.equal(rejoined.code,"0427");assert.equal(rejoined.state.group.name,"검증 그룹");
         const resumed=(await api("/api/state","GET",undefined,a.token)).data;
         assert.equal(resumed.memos.length,2);assert.equal(resumed.todos[0].done,true);
         assert.equal(resumed.group.destination,"솔향 캠핑장");

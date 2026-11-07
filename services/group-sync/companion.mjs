@@ -35,8 +35,12 @@ async function input(req) {
 function publicState(g) {
     return {...g.state,vehicles:g.state.vehicles.filter(v=>v.joined),ownerVehicleId:g.ownerVehicleId || "princess",memberCount:g.state.vehicles.filter(v=>v.joined).length};
 }
-function newGroup(name,destination) {
-    return {code:randomBytes(6).toString("hex").toUpperCase(),dedup:[],state:{
+function inviteCode(value) {
+    if(typeof value!=="string" || value.length!==4 || /[^0-9]/.test(value))fail(400,"초대 코드는 숫자 4자리로 입력해 주세요");
+    return value;
+}
+function newGroup(name,destination,code) {
+    return {code,dedup:[],state:{
         revision:1,group:{id:randomUUID(),name,destination,schedule:"",arrivalTime:""},
         vehicles:[],
         todos:[],memos:[],requests:[],headline:"그룹을 만들었어요",summary:"초대 코드로 동행을 초대해 주세요",
@@ -82,18 +86,23 @@ async function handle(req,res) {
     const data=req.method==="GET"?{}:await input(req);
     const enrollmentKey=req.headers["idempotency-key"]?hash(String(req.headers["idempotency-key"])):null;
     if(req.method==="POST" && url.pathname==="/api/groups") {
-        if(Object.keys(db.groups).length>=100)fail(429,"그룹 생성 한도에 도달했어요");
+        const code=inviteCode(data.code);
         const name=clean(data.name,60),nickname=clean(data.nickname,30);
         if(!name || !nickname)fail(400,"그룹 이름과 닉네임을 입력해 주세요");
         const existing=enrollmentKey && Object.values(db.groups).find(g=>g.enrollmentKey===enrollmentKey);
-        if(existing){const result=issue(existing,existing.ownerVehicleId,nickname);await persist();return json(res,200,result);}
-        const g=newGroup(name,clean(data.destination)||"목적지 미정");g.enrollmentKey=enrollmentKey;db.groups[g.code]=g;
+        if(existing){
+            if(existing.code!==code)fail(409,"다른 초대 코드로 다시 시도해 주세요");
+            const result=issue(existing,existing.ownerVehicleId,nickname);await persist();return json(res,200,result);
+        }
+        if(db.groups[code])fail(409,"이미 사용 중인 초대 코드예요. 다른 숫자 4자리를 정해 주세요");
+        if(Object.keys(db.groups).length>=100)fail(429,"그룹 생성 한도에 도달했어요");
+        const g=newGroup(name,clean(data.destination)||"목적지 미정",code);g.enrollmentKey=enrollmentKey;db.groups[g.code]=g;
         const v={id:randomUUID(),...profile(data),joined:true,status:"출발 대기",listStatus:"출발 대기",location:null,eta:null,distance:null};
         g.state.vehicles.push(v);g.ownerVehicleId=v.id;
         const result=issue(g,v.id,nickname);await persist();return json(res,201,result);
     }
     if(req.method==="POST" && url.pathname==="/api/join") {
-        const g=db.groups[clean(data.code,20).toUpperCase()];
+        const g=db.groups[inviteCode(data.code)];
         if(!g)fail(404,"초대 코드를 확인해 주세요");
         if(data.display)fail(400,"닉네임과 차량명으로 참여해 주세요");
         if(g.state.vehicles.filter(v=>v.joined).length>=30)fail(400,"그룹 차량은 30대까지 참여할 수 있어요");
