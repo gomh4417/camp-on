@@ -50,30 +50,22 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
 
 @Composable fun CampApp() {
     val context=LocalContext.current
-    val preferences=remember { context.getSharedPreferences("camp_on_preferences",0) }
-    var demo by rememberSaveable { mutableStateOf(preferences.getBoolean("demo",false)) }
-    key(demo) {
-        val source=remember {
-            if(demo) DemoVehicleSource(context) else runCatching<VehicleSource> { PleosVehicleSource(context) }.getOrElse {
-                object:VehicleSource {
-                    override suspend fun read():VehicleReading=error("차량 연결 실패")
-                    override suspend fun parking()=ParkingState(null,null)
-                    override suspend fun readControl(id:String):Double?=null
-                    override suspend fun writeControl(id:String,value:Double) { error("차량 연결 실패") }
-                    override fun close() {}
-                }
-            }
-        }
-        val s=remember { CampSession(context,source,if(demo) "camp_on_demo_v3" else "camp_on_v2") }
-        DisposableEffect(s) { onDispose { s.save();source.close() } }
-        CampTheme {
-            CampContent(s) { enabled->
-                preferences.edit().putBoolean("demo",enabled).apply();demo=enabled
+    val source=remember {
+        runCatching<VehicleSource> { PleosVehicleSource(context) }.getOrElse {
+            object:VehicleSource {
+                override suspend fun read():VehicleReading=error("차량 연결 실패")
+                override suspend fun parking()=ParkingState(null,null)
+                override suspend fun readControl(id:String):Double?=null
+                override suspend fun writeControl(id:String,value:Double) { error("차량 연결 실패") }
+                override fun close() {}
             }
         }
     }
+    val s=remember { CampSession(context,source,"camp_on_v2") }
+    DisposableEffect(s) { onDispose { s.save();source.close() } }
+    CampTheme { CampContent(s) }
 }
-@Composable private fun CampContent(s:CampSession,switchSource:(Boolean)->Unit) {
+@Composable private fun CampContent(s:CampSession) {
     val scope=rememberCoroutineScope()
     val context=LocalContext.current
     val journey=remember { JourneySession(context) }
@@ -145,10 +137,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     if(help) PleosGuide { help=false }
     if(editor>=0) ControlEditor(s,editor) { editor=-1 }
     if(presetDialog) PresetDialog(s) { presetDialog=false }
-    if(settings) SettingsDialog(s,{settings=false},switchSource) { scenario->
-        (s.source as? DemoVehicleSource)?.scenario(scenario)
-        scope.launch { s.refresh() }
-    }
+    if(settings) SettingsDialog(s) { settings=false }
     if(confirm.isNotEmpty()) {
         val kind=confirm
         Modal(if(kind=="controls") "차량 설정 적용" else if(kind=="apply") "${s.selected.label} 적용" else if(kind=="start") "캠핑을 시작할까요?" else if(kind=="manual") "직접 복원 확인" else "캠핑 종료·복원",
@@ -485,20 +474,12 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
         }
     })
 }
-@Composable private fun SettingsDialog(s:CampSession,dismiss:()->Unit,switchSource:(Boolean)->Unit,scenario:(String)->Unit) {
-    Modal("연결·시연 설정",dismiss) {
-        Text(if(s.isDemo) "공모전 시연 모드" else "Pleos 차량 연결",style=MaterialTheme.typography.titleLarge)
-        Caption("시연 설정과 실제 차량 세션은 별도로 저장됩니다.")
-        if(s.isDemo) {
-            listOf("일반","에너지 부족","일부 실패","주행 중","수신 지연","연결 끊김").forEach { value->
-                OutlinedButton(onClick={scenario(value)},enabled=!s.busy,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp)) {
-                    Text(if((s.source as? DemoVehicleSource)?.scenario==value) "✓ $value" else value)
-                }
-            }
-        }
-        SecondaryAction(if(s.isDemo) "실제 Pleos 연결로 전환" else "시연 모드로 전환",
-            !s.active && !s.busy && s.written.isEmpty(),Modifier.fillMaxWidth()) { dismiss();switchSource(!s.isDemo) }
-        if(s.active || s.written.isNotEmpty()) Caption("캠핑 종료·복원 후 연결 모드를 전환할 수 있습니다.")
+@Composable private fun SettingsDialog(s:CampSession,dismiss:()->Unit) {
+    Modal("차량 연결",dismiss) {
+        Text("Pleos SDK 연결",style=MaterialTheme.typography.titleLarge)
+        Caption(if(s.connected)"차량 조회값 수신 중" else "차량 연결을 확인하세요")
+        Caption("차량 옵션은 SDK로 요청하고 조회값으로 반영 여부를 확인합니다.")
+        Caption("캠핑 소비량과 종료 예상 배터리는 계획용 추정값입니다. SDK 오류는 가짜 성공으로 대체하지 않습니다.")
     }
 }
 @Composable private fun Modal(title:String,dismiss:()->Unit,content:@Composable ColumnScope.()->Unit) {

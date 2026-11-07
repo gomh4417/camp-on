@@ -56,7 +56,9 @@ import org.json.JSONObject
     var composing by rememberSaveable { mutableStateOf(false) }
     var address by rememberSaveable { mutableStateOf(j.serverUrl) }
     var inviteCode by rememberSaveable { mutableStateOf("") }
-    var connectionName by rememberSaveable { mutableStateOf("차량 화면") }
+    var connectionName by rememberSaveable { mutableStateOf("") }
+    var vehicleModel by rememberSaveable { mutableStateOf("") }
+    var groupTitle by rememberSaveable { mutableStateOf("") }
     var memo by rememberSaveable { mutableStateOf("") }
     val vehicle=j.vehicles.firstOrNull { it.optString("id")==selected }?:j.myVehicle
     BackHandler(screen!=0) { screen=0 }
@@ -67,7 +69,7 @@ import org.json.JSONObject
         Text(if(screen==1)"그룹 차량" else if(screen==3)"위치·경로" else "그룹 브리핑",Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium)
         if(screen==2) SecondaryAction("메모 남기기") { composing=true }
     }
-    Caption(if(!j.connected)"그룹 연결 전" else if(j.fresh)"그룹 정보 수신 중" else j.error.ifBlank { "그룹 정보를 불러오고 있어요" })
+    Caption(if(!j.connected)"그룹 연결 전" else if(j.fresh)"그룹 참여 중 · ${j.vehicles.size}대" else j.error.ifBlank { "그룹 정보를 불러오고 있어요" })
     if(j.message.isNotBlank()) Text(j.message,color=CampAccent)
     when(screen) {
         3->IntegratedJourneyMap(j,s,true) { screen=0 }
@@ -78,7 +80,7 @@ import org.json.JSONObject
                     Image(painterResource(R.drawable.mvp_camping),"캠핑 텐트",Modifier.size(112.dp))
                 }
                 Panel(Modifier.fillMaxWidth()) {
-                    Caption("그룹 차량")
+                    Caption("참여 차량 · ${j.vehicles.size}대")
                     j.vehicles.forEach { v->VehicleRow(j,v) { selected=v.optString("id");screen=1 } }
                     if(j.vehicles.isEmpty()) Caption("연결 후 차량 현황이 표시돼요")
                 }
@@ -161,17 +163,16 @@ import org.json.JSONObject
     },confirmButton={TextButton(onClick={scope.launch { if(j.memo(memo)){memo="";composing=false} }},enabled=j.editable&&memo.isNotBlank()) { Text("보내기") }},
         dismissButton={TextButton(onClick={composing=false}) { Text("닫기") }})
     if(connection) AlertDialog(onDismissRequest={connection=false},title={Text("그룹 연결")},text={
-        Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            if(!j.connected && j.inviteCode.isNotBlank()) SecondaryAction("내 그룹 다시 연결",!j.busy && !j.refreshing) { scope.launch { if(j.resumeMembership())connection=false } }
             OutlinedTextField(address,{address=it},label={Text("공유 서버 주소")})
-            OutlinedTextField(inviteCode,{inviteCode=it.take(20)},label={Text("모바일 초대 코드 · 로컬 서버는 비움")})
-            OutlinedTextField(connectionName,{connectionName=it.take(30)},label={Text("대화에 표시할 이름")})
-            Caption("휴대폰에서 그룹을 만들고 초대 코드를 입력하세요. 참여한 차량만 목록에 표시돼요.")
+            OutlinedTextField(inviteCode,{inviteCode=it.take(20)},label={Text("초대 코드 · 비우면 새 그룹 만들기")})
+            OutlinedTextField(connectionName,{connectionName=it.take(30)},label={Text("내 닉네임")})
+            OutlinedTextField(vehicleModel,{vehicleModel=it.take(60)},label={Text("내 차량명")})
+            if(inviteCode.isBlank())OutlinedTextField(groupTitle,{groupTitle=it.take(60)},label={Text("새 그룹 이름")})
+            Caption("내 차량으로 참여합니다. 초대받은 사람이 연결해야 다른 차량이 추가돼요.")
             if(j.connected) {
-                Caption("이 화면의 차량 · 도착 여부 확인용")
-                j.vehicles.forEach { v->
-                    FilterChip(selected=j.vehicleId==v.optString("id"),onClick={j.selectVehicle(v.optString("id"))},
-                        label={Text(v.label("name"))},modifier=Modifier.heightIn(min=56.dp))
-                }
+                Text("초대 코드 · ${j.inviteCode}")
                 SecondaryAction("이 화면 연결 해제",!j.busy && !j.refreshing) { j.disconnect();connection=false }
             }
             Caption(j.message)
@@ -185,13 +186,12 @@ import org.json.JSONObject
                     // Let an in-flight poll finish instead of dropping the user's tap.
                     while(j.refreshing) kotlinx.coroutines.delay(50)
                     if(j.connect(address)) {
-                        if(inviteCode.isBlank()) { j.connectLocal();j.refresh();connection=false }
-                        else if(j.join(inviteCode,connectionName))connection=false
+                        if(j.join(inviteCode,connectionName,vehicleModel,groupTitle))connection=false
                     }
                 } finally { connecting=false }
             }
         },enabled=!j.busy && !connecting,modifier=Modifier.heightIn(min=64.dp)) {
-            Text(if(connecting)"연결 중…" else "연결")
+            Text(if(connecting)"참여 중…" else if(inviteCode.isBlank())"내 차량으로 그룹 만들기" else "내 차량으로 참여")
         }
     })
 }

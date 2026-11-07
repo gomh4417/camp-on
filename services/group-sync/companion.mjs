@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 
 const root=dirname(fileURLToPath(import.meta.url));
-const file=process.env.COMPANION_DATA_FILE || join(root,"data","companion.json");
+const file=process.env.COMPANION_DATA_FILE || join(root,"data","companion-live.json");
 const port=Number(process.env.PORT || 8788);
 
 let db={groups:{},sessions:{}};
@@ -82,7 +82,7 @@ async function handle(req,res) {
     const data=req.method==="GET"?{}:await input(req);
     const enrollmentKey=req.headers["idempotency-key"]?hash(String(req.headers["idempotency-key"])):null;
     if(req.method==="POST" && url.pathname==="/api/groups") {
-        if(Object.keys(db.groups).length>=100)fail(429,"시연 그룹 수 한도에 도달했어요");
+        if(Object.keys(db.groups).length>=100)fail(429,"그룹 생성 한도에 도달했어요");
         const name=clean(data.name,60),nickname=clean(data.nickname,30);
         if(!name || !nickname)fail(400,"그룹 이름과 닉네임을 입력해 주세요");
         const existing=enrollmentKey && Object.values(db.groups).find(g=>g.enrollmentKey===enrollmentKey);
@@ -95,7 +95,8 @@ async function handle(req,res) {
     if(req.method==="POST" && url.pathname==="/api/join") {
         const g=db.groups[clean(data.code,20).toUpperCase()];
         if(!g)fail(404,"초대 코드를 확인해 주세요");
-        if(g.state.vehicles.filter(v=>v.joined).length>=30 && !data.display)fail(400,"그룹 차량은 30대까지 참여할 수 있어요");
+        if(data.display)fail(400,"닉네임과 차량명으로 참여해 주세요");
+        if(g.state.vehicles.filter(v=>v.joined).length>=30)fail(400,"그룹 차량은 30대까지 참여할 수 있어요");
         if(Object.keys(db.sessions).length>=10000)fail(429,"연결 수 한도에 도달했어요");
         const nickname=clean(data.nickname,30);
         if(!nickname)fail(400,"이름을 입력해 주세요");

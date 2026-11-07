@@ -19,14 +19,14 @@ internal fun JSONObject.objects(key:String):List<JSONObject> {
 internal fun JSONObject.label(key:String)=optString(key).takeUnless { it.isBlank() || it=="null" }?:"—"
 
 internal class JourneySession(context:Context) {
-    private val prefs=context.getSharedPreferences("camp_on_journey",Context.MODE_PRIVATE)
+    private val prefs=context.getSharedPreferences("camp_on_journey_membership",Context.MODE_PRIVATE)
     private val mutex=Mutex()
     var connected by mutableStateOf(false)
         private set
     private var accessToken=prefs.getString("token","").orEmpty()
-    var serverUrl by mutableStateOf(prefs.getString("server","http://10.0.2.2:8787")!!)
+    var serverUrl by mutableStateOf(prefs.getString("server","http://10.0.2.2:8788")!!)
         private set
-    var vehicleId by mutableStateOf(prefs.getString("vehicle","princess")!!)
+    var vehicleId by mutableStateOf(prefs.getString("vehicle","")!!)
         private set
     var camping by mutableStateOf(prefs.getBoolean("camping",false))
         private set
@@ -52,10 +52,8 @@ internal class JourneySession(context:Context) {
     val myVehicle get()=vehicles.firstOrNull { it.optString("id")==vehicleId }
     val arrived get()=fresh && myVehicle?.optString("status")=="도착"
     fun name(id:String)=vehicles.firstOrNull { it.optString("id")==id }?.label("name")?:"그룹원"
-    fun selectVehicle(id:String) {
-        if(busy || vehicles.none { it.optString("id")==id })return
-        vehicleId=id;prefs.edit().putString("vehicle",id).apply()
-    }
+    var inviteCode by mutableStateOf(prefs.getString("code","").orEmpty())
+        private set
     fun connect(value:String):Boolean {
         if(busy || refreshing)return false
         val url=runCatching { URI(value.trim().trimEnd('/')) }.getOrNull()
@@ -69,7 +67,6 @@ internal class JourneySession(context:Context) {
         prefs.edit().putString("server",serverUrl).apply()
         return true
     }
-    fun connectLocal() { connected=true }
     fun disconnect() { connected=false;state=null;receivedAt=0;message="";error="";accessToken="";prefs.edit().remove("token").apply() }
     fun enterCamp(s:CampSession):Boolean {
         if(!arrived || !s.parkingState.allowsControl) { message="내 차량 도착과 주차 상태를 확인하세요";return false }
@@ -84,6 +81,7 @@ internal class JourneySession(context:Context) {
             connection.requestMethod=method
             connection.connectTimeout=3000;connection.readTimeout=5000;connection.instanceFollowRedirects=false
             connection.setRequestProperty("Accept","application/json")
+            if(path in listOf("/api/groups","/api/join"))connection.setRequestProperty("Idempotency-Key",prefs.getString("enrollmentKey",""))
             if(accessToken.isNotEmpty()) connection.setRequestProperty("Authorization","Bearer $accessToken")
             if(payload!=null) {
                 connection.doOutput=true;connection.setRequestProperty("Content-Type","application/json; charset=utf-8")
@@ -100,19 +98,32 @@ internal class JourneySession(context:Context) {
         check(next.optJSONObject("group")!=null && next.optJSONArray("vehicles")!=null) { "그룹 응답 형식 확인 필요" }
         state=next;receivedAt=System.currentTimeMillis();error=""
     }
-    suspend fun join(code:String,nickname:String):Boolean {
-        if(busy || refreshing || nickname.isBlank())return false
+    suspend fun join(code:String,nickname:String,model:String,groupName:String):Boolean {
+        if(busy || refreshing || nickname.isBlank() || model.isBlank()) { message="닉네임과 차량명을 입력하세요";return false }
+        val signature="$serverUrl|$code|$nickname|$model|$groupName"
+        if(prefs.getString("enrollmentSignature","")!=signature) prefs.edit().putString("enrollmentSignature",signature).putString("enrollmentKey",java.util.UUID.randomUUID().toString()).apply()
         busy=true
         return try { mutex.withLock {
-            val result=request("POST","/api/join",JSONObject().put("code",code.trim()).put("nickname",nickname.trim()).put("display",true))
+            val result=request("POST",if(code.isBlank())"/api/groups" else "/api/join",JSONObject().put("code",code.trim()).put("nickname",nickname.trim()).put("model",model.trim()).put("name",groupName.trim().ifBlank { "$nickname 캠핑 그룹" }))
             val token=result.getString("token")
             check(token.isNotBlank())
             accept(result)
-            accessToken=token;vehicleId="";connected=true
-            prefs.edit().putString("token",token).putString("vehicle","").apply()
-            message="";true
+            accessToken=token;vehicleId=result.getString("vehicleId");inviteCode=result.getString("code");connected=true
+            prefs.edit().putString("token",token).putString("vehicle",vehicleId).putString("code",inviteCode).apply()
+            message="그룹에 참여했어요 · ${vehicles.size}대";true
         } } catch(e:CancellationException) { throw e }
         catch(_:Exception) { message="서버 주소와 초대 코드를 확인해 주세요";false }
+        finally { busy=false }
+    }
+    suspend fun resumeMembership():Boolean {
+        if(busy || refreshing || accessToken.isBlank())return false
+        busy=true
+        return try { mutex.withLock {
+            val payload=request("GET","/api/state")
+            check(payload.objects("vehicles").any { it.optString("id")==vehicleId })
+            accept(payload);connected=true;message="그룹에 다시 참여했어요 · ${vehicles.size}대";true
+        } } catch(e:CancellationException) { throw e }
+        catch(_:Exception) { message="이전 그룹 연결을 확인할 수 없어요. 주소와 초대 코드를 확인하세요";false }
         finally { busy=false }
     }
     suspend fun refresh() {
