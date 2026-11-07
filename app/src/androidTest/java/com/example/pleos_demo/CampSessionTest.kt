@@ -62,6 +62,12 @@ class CampSessionTest {
             val s=CampSession(context,vehicle,name)
             s.edit("capacity","100")
             s.addEquipment(Equipment("전자레인지",1400.0,.01))
+            val firstId=s.equipmentIds.last()
+            s.addEquipment(Equipment("소형 전자레인지",900.0,.02))
+            s.edit("idea.equipment",s.equipmentIds.last())
+            val chosenId=s.equipmentIds.last()
+            assertEquals(chosenId,s.equipmentIds[s.ideaEquipmentIndex(campIdeas.first { it.id=="popcorn" })])
+            assertEquals("0.01",s.fields["hours$firstId"])
             s.refresh()
             val idea=campIdeas.first { it.id=="popcorn" }
             assertTrue(s.prepareIdea(idea,4))

@@ -99,7 +99,13 @@ private val equipmentCatalog=listOf(
     equipmentCatalog.chunked(2).forEach { pair->
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             pair.forEach { item->
-                SecondaryAction("+ ${item.name}",modifier=Modifier.weight(1f)) { s.addEquipment(item) }
+                OutlinedButton(onClick={s.addEquipment(item)},modifier=Modifier.weight(1f).heightIn(min=144.dp),
+                    shape=androidx.compose.foundation.shape.RoundedCornerShape(20.dp)) {
+                    Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                        EquipmentArt(item.name,Modifier.size(90.dp))
+                        Column(Modifier.weight(1f)) { Text("+ ${item.name}");Caption("${item.watts.toInt()} W") }
+                    }
+                }
             }
         }
     }

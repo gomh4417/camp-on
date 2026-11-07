@@ -1,6 +1,9 @@
 package com.example.pleos_demo
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
@@ -8,7 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,45 +26,59 @@ import androidx.compose.ui.unit.dp
 
 @Composable internal fun CampExperience(s:CampSession,start:()->Unit,apply:()->Unit,plan:()->Unit,edit:(Int)->Unit) {
     val mode=s.selected
-    val ideas=matchingIdeas(mode,s.equipment())
+    val selectedId=s.fields["idea.equipment"]
+    val owned=s.equipmentIds.zip(s.equipment())
+    val selectedEquipment=owned.firstOrNull { it.first==selectedId }?.second
+    val ideas=matchingIdeas(mode,selectedEquipment?.let { listOf(it) }?:s.equipment())
     val chosen=ideas.firstOrNull { it.id==s.fields["idea.current"] }
-    var equipmentOpen by rememberSaveable { mutableStateOf(false) }
+
     Column(verticalArrangement=Arrangement.spacedBy(20.dp)) {
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             CampMode.visible.forEach { m->
                 OutlinedButton(onClick={s.selectMode(m)},enabled=!s.busy,
-                    modifier=Modifier.weight(1f).heightIn(min=64.dp),shape=RoundedCornerShape(16.dp)) {
-                    Text(if(mode==m)"✓ ${m.label}" else m.label)
+                    modifier=Modifier.weight(1f).heightIn(min=172.dp),shape=RoundedCornerShape(24.dp),
+                    colors=ButtonDefaults.outlinedButtonColors(containerColor=if(mode==m)Color(0xFFEAF2FF) else Color.White)) {
+                    Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                        ModeArt(m,Modifier.size(96.dp))
+                        Text(if(mode==m)"✓ ${m.label}" else m.label,style=MaterialTheme.typography.titleMedium)
+                    }
                 }
             }
         }
-        Panel(Modifier.fillMaxWidth()) {
+        if(chosen==null) Panel(Modifier.fillMaxWidth()) {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                 CampCompanion()
-                Column(Modifier.weight(1f)) {
-                    Text("가져온 장비로, 오늘의 캠핑",style=MaterialTheme.typography.headlineSmall)
-                    Caption("할 일을 고르면 사용 전력과 귀가 여유, 차량 환경까지 함께 준비해요.")
+                Text("오늘 사용할 장비를 골라요",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
+            }
+            Caption("에너지 계획에 등록한 장비로 추천해요.")
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                FilterChip(selected=selectedEquipment==null,onClick={s.edit("idea.equipment","__all__")},
+                    label={Text("전체 추천")},modifier=Modifier.heightIn(min=72.dp))
+                owned.forEach { (id,equipment)->
+                    OutlinedButton(onClick={s.edit("idea.equipment",id)},modifier=Modifier.width(180.dp).heightIn(min=152.dp),
+                        shape=RoundedCornerShape(20.dp)) {
+                        Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                            EquipmentArt(equipment.name,Modifier.size(90.dp))
+                            Text((if(id==selectedId)"✓ " else "")+equipment.name)
+                        }
+                    }
                 }
             }
-            Text(s.equipment().joinToString(" · ") { it.name }.ifBlank { "아직 등록한 장비가 없어요" },
-                style=MaterialTheme.typography.bodyMedium)
-            SecondaryAction(if(equipmentOpen)"장비 접기" else "가져온 장비 선택",modifier=Modifier.fillMaxWidth()) {
-                equipmentOpen=!equipmentOpen
-            }
-            if(equipmentOpen) EquipmentPicker(s)
+            TextButton(onClick=plan,modifier=Modifier.heightIn(min=56.dp)) { Text("등록 장비 관리 · 에너지 계획") }
         }
         if(chosen==null) {
             if(ideas.isEmpty()) Panel(Modifier.fillMaxWidth()) {
-                Text("어떤 전기제품을 가져왔나요?",style=MaterialTheme.typography.titleLarge)
+                Text(if(owned.isEmpty())"먼저 사용할 장비를 등록해요" else "이 모드에 맞는 장비를 더해볼까요?",style=MaterialTheme.typography.titleLarge)
                 Caption(when(mode) {
                     CampMode.COOK->"전자레인지로 팝콘, 에어프라이어로 치킨, 인덕션으로 따뜻한 라면을 만들 수 있어요."
                     CampMode.SLEEP->"전기장판을 등록하면 밤사이 소비와 귀가할 에너지를 함께 살펴봐요."
                     else->"전기포트로 차 한 잔, 프로젝터로 야외 영화관을 준비해 보세요."
                 })
-                PrimaryAction("장비 고르고 추천 보기",modifier=Modifier.fillMaxWidth()) { equipmentOpen=true }
+                PrimaryAction("에너지 계획에서 장비 등록",modifier=Modifier.fillMaxWidth(),action=plan)
             }
             ideas.forEach { idea->
                 Panel(Modifier.fillMaxWidth()) {
+                    EquipmentArt(idea.device,Modifier.size(150.dp))
                     Caption("${idea.device} 활용 · 계획용 ${idea.minutes}분")
                     Text(idea.title,style=MaterialTheme.typography.titleLarge)
                     Text(idea.subtitle)
@@ -114,11 +130,22 @@ import androidx.compose.ui.unit.dp
     val prepared=minutes!=null && s.ideaPrepared(idea,minutes)
     val equipment=s.equipment().getOrNull(s.ideaEquipmentIndex(idea))
     Panel(Modifier.fillMaxWidth()) {
-        Caption(idea.device)
-        Text(idea.title,style=MaterialTheme.typography.headlineSmall)
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(24.dp)) {
+            EquipmentArt(idea.device,Modifier.size(180.dp))
+            Column(Modifier.weight(1f)) {
+                Caption(idea.device)
+                Text(idea.title,style=MaterialTheme.typography.headlineSmall)
+            }
+        }
         Text("준비물",style=MaterialTheme.typography.titleMedium)
         Text(idea.materials)
-        idea.instructions.forEachIndexed { i,instruction->Text("${i+1}. $instruction") }
+        idea.instructions.forEachIndexed { i,instruction->
+            Row(Modifier.fillMaxWidth().background(CampBackground,RoundedCornerShape(18.dp)).padding(16.dp),
+                verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                EquipmentArt(idea.device,Modifier.size(72.dp))
+                Column(Modifier.weight(1f)) { Caption("0${i+1}");Text(instruction) }
+            }
+        }
         if(idea.sourceUrl.isNotBlank()) TextButton(onClick={
             runCatching { uriHandler.openUri(idea.sourceUrl) }.onFailure { s.message="안내를 열 수 없어요. 기기 설명서를 확인해 주세요." }
         },modifier=Modifier.heightIn(min=56.dp)) { Text("조리 안내 출처 보기") }
@@ -134,13 +161,13 @@ import androidx.compose.ui.unit.dp
             style=MaterialTheme.typography.titleLarge,color=CampAccent)
         if(budget!=null && budget.continuedShortfall>0)
             Caption("귀가·예비 포함 ${budget.continuedShortfall.fmt()} kWh 부족 · 사용 계획을 줄여 주세요.")
-        PrimaryAction(if(prepared)"✓ 사용 계획에 반영됨" else "사용 계획 준비",
+        PrimaryAction(if(prepared)"✓ 실행 계획 반영됨" else "실행",
             !s.busy && !prepared && budget!=null && budget.continuedShortfall==0.0,Modifier.fillMaxWidth()) {
-            minutes?.let { s.prepareIdea(idea,it) }
+            minutes?.let { if(s.prepareIdea(idea,it)) { if(s.active)apply() else start() } }
         }
         if(prepared) TextButton(onClick={s.edit("idea.prepared","")},enabled=!s.busy,
-            modifier=Modifier.heightIn(min=56.dp)) { Text("새 사용 계획으로 다시 준비") }
-        TextButton(onClick=plan,modifier=Modifier.heightIn(min=56.dp)) { Text("소비전력·종료 시각·귀가 조건 수정") }
+            modifier=Modifier.heightIn(min=56.dp)) { Text("새 활동 실행") }
+        TextButton(onClick=plan,modifier=Modifier.heightIn(min=56.dp)) { Text("장비·시간 수정 · 에너지 계획") }
     }
     Panel(Modifier.fillMaxWidth()) {
         Text("차는 쉴 공간으로 준비",style=MaterialTheme.typography.titleLarge)

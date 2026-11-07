@@ -107,9 +107,10 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                 }
                 if(!s.minimized) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                        listOf(4 to "함께 이동",0 to "캠핑 현황",1 to "에너지 계획",2 to "종료·귀가").forEach { (i,label)->
-                            TextButton(onClick={page=i},modifier=Modifier.heightIn(min=56.dp),
-                                colors=ButtonDefaults.textButtonColors(contentColor=if(page==i)CampInk else CampMuted)) {
+                        listOf(4 to "함께 이동",1 to "에너지 계획",0 to "캠핑 현황",2 to "종료·귀가").forEach { (i,label)->
+                            FilledTonalButton(onClick={page=i},modifier=Modifier.heightIn(min=76.dp).widthIn(min=180.dp),
+                                shape=RoundedCornerShape(20.dp),colors=ButtonDefaults.filledTonalButtonColors(
+                                    containerColor=if(page==i)CampAccent else Color.White,contentColor=if(page==i)Color.White else CampInk)) {
                                 Text(if(page==i)"●  $label" else label)
                             }
                         }
@@ -127,8 +128,8 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                             JourneyCarryover(journey) { page=4 }
                             Dashboard(s,wide,{confirm="start"},{editor=it},{presetDialog=true},{page=1},{page=3},{confirm="apply"})
                         }
-                        4->JourneyScreen(journey,s,wide) { page=0 }
-                        1->PlanScreen(s,wide,{page=3})
+                        4->JourneyScreen(journey,s,wide) { page=1 }
+                        1->PlanScreen(s,wide,{page=3},{page=0},{page=2})
                         2->DepartureScreen(s,wide,{confirm="end"},{confirm="manual"},{page=1})
                         3->EnergyDetail(s) { page=1 }
                     }
@@ -171,7 +172,10 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
                 scope.launch { when(kind) {
                     "apply"->s.applyMode()
                     "controls"->s.applyMode(onlyEdited=true)
-                    "start"->s.start()
+                    "start"->{
+                        s.start()
+                        if(s.active && s.fields["idea.current"].orEmpty().isNotBlank())confirm="apply"
+                    }
                     "manual"->s.acknowledgeManualRestore()
                     else->s.endAndRestore()
                 } }
@@ -210,7 +214,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
             Allocation(s.budget)
             LabelValue("캠핑 가용",s.budget?.available.fmt()+" kWh")
             LabelValue("남은 사용 계획",s.budget?.consumption.fmt()+" kWh")
-            BatteryForecast(s)
+            Caption("자세한 소비 그래프는 에너지 계획에서 확인해요.")
             HorizontalDivider(color=CampLine)
             LabelValue("종료 예정",s.fields["end"].orEmpty().takeLast(5))
             LabelValue("남은 시간",s.remainingHours.fmt()+" h")
@@ -269,8 +273,8 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
         }
     }
 }
-@Composable private fun PlanScreen(s:CampSession,wide:Boolean,detail:()->Unit) {
-    Text("얼마나 더 쉬어볼까요?",style=MaterialTheme.typography.headlineLarge)
+@Composable private fun PlanScreen(s:CampSession,wide:Boolean,detail:()->Unit,camp:()->Unit,departure:()->Unit) {
+    Text("장비를 담고, 캠핑을 시작해요",style=MaterialTheme.typography.headlineLarge)
     Split(wide,left={
         Panel(Modifier.fillMaxWidth()) {
             Caption("01  캠핑 일정")
@@ -284,11 +288,10 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
             Caption("입력 시간은 앞으로 사용할 시간입니다. 종료 예정 시각까지의 소비만 합산합니다.")
         }
         Panel(Modifier.fillMaxWidth()) {
-            Caption("03  귀가 조건")
-            HomeRouteSettings(s)
+            Caption("03  계산 설정")
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Field(s,"capacity","용량 보정 · kWh (비우면 차량값)",Modifier.weight(1f),valid=s.fields["capacity"].isNullOrBlank() || validNumber(s,"capacity",positive=true))
-                Field(s,"reserve","보호 예비량 · kWh",Modifier.weight(1f),valid=validNumber(s,"reserve"))
+
             }
             Caption("계산 용량 ${s.capacityKwh.fmt()} kWh · "+if(s.fields["capacity"].isNullOrBlank()) "차량 공칭 사용 가능 용량 / 신차 기준" else "사용자 입력")
             Field(s,"baseKw","기본 부하 · kW",valid=validNumber(s,"baseKw"))
@@ -304,7 +307,8 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
             HorizontalDivider(color=CampLine)
             LabelValue("계획 후 여유",s.budget?.margin.fmt()+" kWh")
             Allocation(s.budget)
-            PrimaryAction("계획 저장",s.budget!=null && s.endValid(),Modifier.fillMaxWidth()) { s.save();s.message="계획을 저장했습니다" }
+            PrimaryAction("저장하고 캠핑 현황으로",s.endValid(),Modifier.fillMaxWidth()) { s.save();camp() }
+            SecondaryAction("귀가 조건 설정",modifier=Modifier.fillMaxWidth(),action=departure)
             TextButton(onClick=detail,modifier=Modifier.heightIn(min=56.dp)) { Text("계산 근거·변화 추이") }
         }
         Panel(Modifier.fillMaxWidth()) {
@@ -449,7 +453,9 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
         }
     },right={
         Panel(Modifier.fillMaxWidth(),emphasis=true) {
-            Caption("03  귀가 에너지")
+            Caption("03  귀가 조건·에너지")
+            HomeRouteSettings(s)
+            Field(s,"reserve","보호 예비량 · kWh",valid=validNumber(s,"reserve"))
             Text(s.fields["destination"].orEmpty().ifBlank { "목적지 미입력" },style=MaterialTheme.typography.headlineMedium)
             Caption("${s.fields["distance"]} km · ${s.fields["efficiency"]} km/kWh")
             LabelValue("종료 예상 잔여",s.budget?.departure.fmt()+" kWh")
@@ -459,7 +465,7 @@ private fun validNumber(s:CampSession,key:String,integer:Boolean=false,positive:
             HorizontalDivider(color=CampLine)
             LabelValue("추가 충전 필요",s.budget?.continuedShortfall.fmt()+" kWh")
             Caption("입력 조건에 따른 예상이며, 도달 가능성을 보장하지 않습니다.")
-            SecondaryAction("목적지·계획 수정",modifier=Modifier.fillMaxWidth(),action=plan)
+            SecondaryAction("장비·소비 계획 수정",modifier=Modifier.fillMaxWidth(),action=plan)
             PrimaryAction("CAMP FLOW 귀가 준비",s.budget!=null,Modifier.fillMaxWidth()) { s.prepareHandoff() }
         }
         if(s.handoff.isNotEmpty()) Panel(Modifier.fillMaxWidth()) {

@@ -154,7 +154,11 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
             .forEach { (k,v)->fields[k+id]=v;edited[k+id]=now }
         changed();save()
     }
-    internal fun ideaEquipmentIndex(idea:CampIdea)=equipment().indexOfFirst { idea.matches(it.name) }
+    internal fun ideaEquipmentIndex(idea:CampIdea):Int {
+        val selectedIndex=equipmentIds.indexOf(fields["idea.equipment"])
+        return if(selectedIndex>=0 && idea.matches(equipment()[selectedIndex].name)) selectedIndex
+            else equipment().indexOfFirst { idea.matches(it.name) }
+    }
     internal fun ideaPrepared(idea:CampIdea,minutes:Int):Boolean {
         val index=ideaEquipmentIndex(idea)
         val id=equipmentIds.getOrNull(index)?:return false
@@ -190,7 +194,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         selectMode(idea.mode)
         fields["idea.current"]=idea.id
         changed();save()
-        message="사용 계획 준비 완료 · 차량 환경은 확인 후 적용해요"
+        message="실행 계획 반영 · 차량 설정을 확인하고 적용하세요"
         return true
     }
     fun removeEquipment(id:String) { equipmentIds.remove(id);changed();save() }

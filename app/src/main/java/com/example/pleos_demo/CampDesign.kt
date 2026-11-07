@@ -41,14 +41,14 @@ private val CampTypography=Typography(
 }
 @Composable internal fun Panel(modifier:Modifier=Modifier,emphasis:Boolean=false,content:@Composable ColumnScope.()->Unit) {
     Column(modifier.background(CampSurface,RoundedCornerShape(24.dp))
-        .padding(32.dp),verticalArrangement=Arrangement.spacedBy(20.dp),content=content)
+        .padding(24.dp),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
 }
 @Composable internal fun Caption(text:String) { Text(text,color=CampMuted,style=MaterialTheme.typography.bodySmall) }
 @Composable internal fun PrimaryAction(text:String,enabled:Boolean=true,modifier:Modifier=Modifier,action:()->Unit) {
-    Button(action,modifier.heightIn(min=56.dp),enabled=enabled,shape=RoundedCornerShape(20.dp),
+    Button(action,modifier.heightIn(min=72.dp),enabled=enabled,shape=RoundedCornerShape(20.dp),
         contentPadding=PaddingValues(horizontal=24.dp,vertical=14.dp)) { Text(text) }
 }
 @Composable internal fun SecondaryAction(text:String,enabled:Boolean=true,modifier:Modifier=Modifier,action:()->Unit) {
-    FilledTonalButton(action,modifier.heightIn(min=56.dp),enabled=enabled,shape=RoundedCornerShape(16.dp),
+    FilledTonalButton(action,modifier.heightIn(min=72.dp),enabled=enabled,shape=RoundedCornerShape(16.dp),
         colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color(0xFFF0F1F3),contentColor=CampInk)) { Text(text) }
 }

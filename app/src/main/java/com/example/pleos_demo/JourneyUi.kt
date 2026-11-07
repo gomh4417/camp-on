@@ -34,7 +34,7 @@ import org.json.JSONObject
         .clickable(onClick=action).padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
         Avatar(v.optString("id"))
         Column(Modifier.weight(1f)) {
-            Text(v.label("name"),color=if(v.optString("id")==j.vehicleId)Color(0xFF008653) else CampInk,style=MaterialTheme.typography.titleMedium)
+            Text(v.label("name"),color=if(v.optString("id")==j.vehicleId)CampAccent else CampInk,style=MaterialTheme.typography.titleMedium)
             Caption(v.label("listStatus"))
         }
         Column(horizontalAlignment=Alignment.End) {
@@ -53,6 +53,8 @@ import org.json.JSONObject
     var connection by rememberSaveable { mutableStateOf(false) }
     var composing by rememberSaveable { mutableStateOf(false) }
     var address by rememberSaveable { mutableStateOf(j.serverUrl) }
+    var inviteCode by rememberSaveable { mutableStateOf("") }
+    var connectionRole by rememberSaveable { mutableStateOf(j.vehicleId) }
     var memo by rememberSaveable { mutableStateOf("") }
     val vehicle=j.vehicles.firstOrNull { it.optString("id")==selected }?:j.myVehicle
     BackHandler(screen!=0) { screen=0 }
@@ -137,7 +139,7 @@ import org.json.JSONObject
                 }
             }
             val logs:@Composable ()->Unit={Panel(Modifier.fillMaxWidth().heightIn(min=654.dp)) {
-                Text("메모 입력 로그",style=MaterialTheme.typography.titleLarge)
+                Text("그룹 대화",style=MaterialTheme.typography.titleLarge)
                 j.memos.reversed().forEach { m->
                     Row(Modifier.fillMaxWidth().padding(vertical=20.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                         Avatar(m.optString("vehicleId"))
@@ -159,11 +161,36 @@ import org.json.JSONObject
     if(connection) AlertDialog(onDismissRequest={connection=false},title={Text("그룹 연결")},text={
         Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(address,{address=it},label={Text("공유 서버 주소")})
-            Caption("그룹 시연 서버 · 내 차량 선택")
+            OutlinedTextField(inviteCode,{inviteCode=it.take(20)},label={Text("모바일 초대 코드 · 로컬 서버는 비움")})
+            Caption("PC = CAR A · 휴대폰 = CAR B / C")
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                listOf("princess","tralala","tiramisu").forEachIndexed { index,id->
+                    FilterChip(selected=connectionRole==id,onClick={connectionRole=id},
+                        label={Text("CAR ${'A'+index}")},modifier=Modifier.heightIn(min=64.dp))
+                }
+            }
+            Caption("기존 로컬 그룹 · 내 차량 선택")
             j.vehicles.forEach { v->FilterChip(selected=j.vehicleId==v.optString("id"),onClick={j.selectVehicle(v.optString("id"))},label={Text(v.label("name"))}) }
             Caption(j.message)
         }
-    },confirmButton={TextButton(onClick={if(j.connect(address)){connection=false;scope.launch { j.refresh() }}}) { Text("연결") }})
+    },confirmButton={
+        var connecting by remember { mutableStateOf(false) }
+        TextButton(onClick={
+            connecting=true
+            scope.launch {
+                try {
+                    // Let an in-flight poll finish instead of dropping the user's tap.
+                    while(j.refreshing) kotlinx.coroutines.delay(50)
+                    if(j.connect(address)) {
+                        if(inviteCode.isBlank()) { j.refresh();connection=false }
+                        else if(j.join(inviteCode,connectionRole))connection=false
+                    }
+                } finally { connecting=false }
+            }
+        },enabled=!j.busy && !connecting,modifier=Modifier.heightIn(min=64.dp)) {
+            Text(if(connecting)"연결 중…" else "연결")
+        }
+    })
 }
 
 @Composable private fun JourneyMap(openOriginal:()->Unit) {

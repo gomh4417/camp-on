@@ -1,5 +1,7 @@
 /services/group-sync/data/
 /services/group-sync/node_modules/
+**/.vercel/
+/services/group-sync/mobile/.gitignore
 /.idea/
 /.kotlin/
 **/graphify-out/
