@@ -87,6 +87,7 @@ import java.util.Locale
 }
 
 private val equipmentCatalog=listOf(
+    Equipment("전자레인지",1400.0,.1),Equipment("에어프라이어",1500.0,.5),
     Equipment("인덕션",1200.0,.5),Equipment("전기포트",1500.0,.1),
     Equipment("냉장고",60.0,8.0,.4),Equipment("전기장판",60.0,8.0),
     Equipment("LED 조명",20.0,6.0),Equipment("선풍기",35.0,4.0),

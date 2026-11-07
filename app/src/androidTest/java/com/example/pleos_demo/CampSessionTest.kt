@@ -54,6 +54,65 @@ class CampSessionTest {
         } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
     }
 
+    @Test fun ideaPreparationPersistsWithoutActuationOrDuplicateTimeExtension()=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_idea_${System.nanoTime()}"
+        val vehicle=VehicleFake()
+        try {
+            val s=CampSession(context,vehicle,name)
+            s.edit("capacity","100")
+            s.addEquipment(Equipment("전자레인지",1400.0,.01))
+            s.refresh()
+            val idea=campIdeas.first { it.id=="popcorn" }
+            assertTrue(s.prepareIdea(idea,4))
+            delay(20)
+            s.start()
+            assertTrue(s.active)
+            assertTrue(s.ideaPrepared(idea,4))
+            val id=s.equipmentIds[s.ideaEquipmentIndex(idea)]
+            val editedAt=s.edited["hours$id"]
+            val hours=s.fields["hours$id"]
+            s.now+=1_000
+            assertTrue(s.prepareIdea(idea,4))
+            assertEquals(editedAt,s.edited["hours$id"])
+            assertEquals(hours,s.fields["hours$id"])
+            assertEquals(0,vehicle.writes)
+            val resumed=CampSession(context,vehicle,name)
+            assertTrue(resumed.ideaPrepared(idea,4))
+            assertEquals("popcorn",resumed.fields["idea.current"])
+            resumed.edit("hours$id","1.0")
+            assertFalse(resumed.ideaPrepared(idea,4))
+            assertNull(resumed.ideaBudget(idea,4)) // No fresh observation after restart.
+            resumed.refresh()
+            assertNotNull(resumed.ideaBudget(idea,4))
+            resumed.now+=31_000
+            assertNull(resumed.ideaBudget(idea,4))
+            assertFalse(resumed.prepareIdea(idea,4))
+            assertEquals(0,vehicle.writes)
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+    }
+
+    @Test fun ideaPreparationRejectsShortfallInvalidTimeAndMissingEquipment()=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_idea_boundary_${System.nanoTime()}"
+        val vehicle=VehicleFake()
+        try {
+            val s=CampSession(context,vehicle,name)
+            s.edit("capacity","100")
+            s.refresh()
+            val idea=campIdeas.first { it.id=="chicken" }
+            assertNull(s.ideaBudget(idea,30))
+            s.addEquipment(Equipment("에어프라이어",1500.0,.5))
+            assertNull(s.ideaBudget(idea,0))
+            assertNull(s.ideaBudget(idea,1441))
+            assertNull(s.ideaBudget(idea,1440)) // Beyond the session deadline.
+            s.edit("distance","10000")
+            assertFalse(s.prepareIdea(idea,30))
+            assertNull(s.fields["idea.prepared"])
+            assertEquals(0,vehicle.writes)
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+    }
+
     @Test fun partialDuplicateRestartAndManualRestore()=runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val name="test_camp_${System.nanoTime()}"

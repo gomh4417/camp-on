@@ -154,6 +154,45 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
             .forEach { (k,v)->fields[k+id]=v;edited[k+id]=now }
         changed();save()
     }
+    internal fun ideaEquipmentIndex(idea:CampIdea)=equipment().indexOfFirst { idea.matches(it.name) }
+    internal fun ideaPrepared(idea:CampIdea,minutes:Int):Boolean {
+        val index=ideaEquipmentIndex(idea)
+        val id=equipmentIds.getOrNull(index)?:return false
+        return fields["idea.prepared"]=="${idea.id}|$id|$minutes" &&
+            edited["hours$id"]?.toString()==fields["idea.preparedAt"]
+    }
+    internal fun ideaBudget(idea:CampIdea,minutes:Int):Budget? {
+        if(!connected || !fresh || !endValid() || minutes !in 1..1440 || ideaEquipmentIndex(idea)<0) return null
+        val prepared=ideaPrepared(idea,minutes)
+        if(!prepared && minutes/60.0>(remainingHours?:0.0)) return null
+        val planned=if(prepared) remainingEquipment()
+            else plannedIdeaEquipment(remainingEquipment(),ideaEquipmentIndex(idea),minutes)?:return null
+        val vehicle=climateKwh?.let { climate->baseKwh?.plus(climate) }?:return null
+        return Energy.calculate(capacityKwh,soc,number("distance"),number("efficiency"),number("reserve"),vehicle,planned)
+    }
+    internal fun prepareIdea(idea:CampIdea,minutes:Int):Boolean {
+        if(busy)return false
+        val budget=ideaBudget(idea,minutes)
+        if(budget==null || budget.continuedShortfall>0) { message="종료 시각과 귀가 에너지 여유를 확인해 주세요";return false }
+        val index=ideaEquipmentIndex(idea)
+        if(index !in equipmentIds.indices)return false
+        val equipmentId=equipmentIds[index]
+        val signature="${idea.id}|$equipmentId|$minutes"
+        if(!ideaPrepared(idea,minutes)) {
+            val planned=plannedIdeaEquipment(remainingEquipment(),index,minutes)?:return false
+            fields["hours$equipmentId"]=planned[index].hours.toString()
+            edited["hours$equipmentId"]=now
+            fields["idea.prepared"]=signature
+            fields["idea.preparedAt"]=now.toString()
+            fields["idea.device"]=equipmentId
+            fields["idea.minutes"]=minutes.toString()
+        }
+        selectMode(idea.mode)
+        fields["idea.current"]=idea.id
+        changed();save()
+        message="사용 계획 준비 완료 · 차량 환경은 확인 후 적용해요"
+        return true
+    }
     fun removeEquipment(id:String) { equipmentIds.remove(id);changed();save() }
     fun endValid()=(endMillis?:0)>now
     fun edit(key:String,value:String) { fields[key]=value;edited[key]=now;changed();save() }
@@ -241,7 +280,11 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
             if(written.isEmpty()) { initial.clear();results.clear() }
             current.filterKeys { reading.isFresh(it,now) }.forEach { (id,value)->if(id !in initial) initial[id]=value }
             checks.clear()
+            val preparedId=fields["idea.device"]
+            val keepPrepared=preparedId in equipmentIds && !fields["idea.prepared"].isNullOrBlank() &&
+                edited["hours$preparedId"]?.toString()==fields["idea.preparedAt"]
             equipmentIds.forEach { edited["hours$it"]=now }
+            if(keepPrepared) fields["idea.preparedAt"]=now.toString()
             createdAt=now;active=true;modeStatus="적용 전";message="캠핑을 시작했습니다";save()
         } } finally { busy=false }
     }
