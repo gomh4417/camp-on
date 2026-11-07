@@ -32,7 +32,7 @@ import java.io.ByteArrayOutputStream
             "data:image/png;base64,"+Base64.encodeToString(bytes,Base64.NO_WRAP)
         }
     }
-    val html=remember { mapHtml(avatars) }
+    val html=remember { mapHtml(avatars,context.assets.open("journey-simulation.js").bufferedReader().use { it.readText() }) }
     val map=remember { WebView(context).apply {
         layoutParams=android.view.ViewGroup.LayoutParams(-1,-1)
         settings.javaScriptEnabled=true;settings.allowFileAccess=false;settings.allowContentAccess=false
@@ -50,8 +50,11 @@ import java.io.ByteArrayOutputStream
         loadDataWithBaseURL("https://camp-on.local/",html,"text/html","UTF-8",null)
     } }
     DisposableEffect(map) { onDispose { map.stopLoading();map.destroy() } }
-    LaunchedEffect(loaded,j.receivedAt,s.fields["routeGeometry"]) {
+    LaunchedEffect(loaded,j.receivedAt,j.fresh,s.fields["routeGeometry"]) {
         if(loaded) {
+            val members=JSONArray()
+            if(j.fresh)j.vehicles.forEach { v->members.put(JSONObject().put("id",v.optString("id")).put("name",v.label("name"))) }
+            map.evaluateJavascript("window.updateTripMembers($members)",null)
             val positions=JSONArray()
             if(j.fresh) j.vehicles.forEachIndexed { index,v->
                 val lat=v.optDouble("latitude");val lon=v.optDouble("longitude")
@@ -78,7 +81,7 @@ import java.io.ByteArrayOutputStream
                 }
             }
         }
-        Caption("위치 수신 차량만 표시 · 집 경로는 저장 후 표시")
+        Caption("지도에서 시연 출발지·목적지 선택 → 함께 이동 · 참여한 프로필만 표시")
         Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             SecondaryAction(if(expanded)"지도 줄이기" else "위치·경로 크게 보기",modifier=Modifier.weight(1f),action=onExpand)
 
@@ -86,10 +89,10 @@ import java.io.ByteArrayOutputStream
     }
 }
 
-private fun mapHtml(avatars:List<String>)="""<!doctype html>
+private fun mapHtml(avatars:List<String>,simulation:String)="""<!doctype html>
 <html lang="ko"><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<style>html,body,#map{margin:0;height:100%;font-family:sans-serif}.avatar{border:3px solid white;border-radius:50%;width:48px;height:48px;box-shadow:0 2px 6px #777}.note{background:white;border-radius:12px;padding:12px;color:#191f28;font-size:16px}</style>
+<style>html,body,#map{margin:0;height:100%;font-family:sans-serif}.avatar{border:3px solid white;border-radius:50%;width:48px;height:48px;box-shadow:0 2px 6px #777}.note{background:white;border-radius:12px;padding:12px;color:#191f28;font-size:16px}.trip-controls{background:#fff;border-radius:16px;padding:16px;width:320px;max-width:50vw;color:#26364b;box-sizing:border-box}.trip-controls p{font-size:15px;min-height:42px;margin:8px 0}.trip-controls button{min-height:56px;border:0;border-radius:12px;background:#eaf1ff;color:#215bb5;font-size:15px;padding:8px;cursor:pointer}.trip-controls button:disabled{opacity:.45}.trip-controls button:focus-visible{outline:3px solid #246beb}.trip-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.trip-controls label{display:flex;align-items:center;min-height:56px;font-size:16px}.trip-controls input{width:24px;height:24px}.trip-controls small{display:block;margin-top:8px;font-size:12px}.trip-controls #trip-step{width:100%}.trip-profile{display:flex;align-items:center;flex-direction:column}.trip-profile img{width:44px;height:44px;border:3px solid #246beb;border-radius:50%;background:white}.trip-profile span{background:white;color:#1e395e;border:1px solid #c7d9f5;border-radius:8px;padding:4px 8px;font-size:14px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.trip-profile:after{content:"";border:7px solid transparent;border-top-color:#246beb}</style>
 </head><body><div id="map"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const map=L.map('map',{zoomControl:true}).setView([37.77,128.9],12);
@@ -100,7 +103,9 @@ let home=null;
 const status=L.control({position:'bottomleft'});
 status.onAdd=()=>{const el=L.DomUtil.create('div','note');el.id='status';el.textContent='위치 수신 대기';return el};status.addTo(map);
 const tell=t=>document.getElementById('status').textContent=t;
-window.updateVehicles=items=>{live.clearLayers();items.forEach(v=>L.marker([v.lat,v.lon],{icon:icon(v.index)}).bindTooltip(document.createTextNode(v.name)).addTo(live));tell(items.length?'위치 수신 '+items.length+'대':'위치 수신 대기')};
-window.homeRoute=g=>{if(home)map.removeLayer(home);home=L.geoJSON(g,{style:{color:'#246beb',weight:5}}).addTo(map);map.fitBounds(home.getBounds(),{padding:[35,35]})};
+window.updateVehicles=items=>{live.clearLayers();items.forEach(v=>L.marker([v.lat,v.lon],{icon:icon(v.index)}).bindTooltip(document.createTextNode(v.name)).addTo(live));if(!window.tripSimulationActive)tell(items.length?'위치 수신 '+items.length+'대':'위치 수신 대기')};
+let homeKey='';
+window.homeRoute=g=>{const key=JSON.stringify(g);if(key===homeKey)return;homeKey=key;if(home)map.removeLayer(home);home=L.geoJSON(g,{style:{color:'#246beb',weight:5}});if(!window.tripSimulationActive){home.addTo(map);map.fitBounds(home.getBounds(),{padding:[35,35]})}};
+$simulation
 window.mapReady=true;
 </script></body></html>"""
