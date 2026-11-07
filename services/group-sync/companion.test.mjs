@@ -21,11 +21,26 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
     try {
         await start();
         assert.equal((await api("/api/state")).status,401);
-        const a=(await api("/api/groups","POST",{name:"검증 그룹",nickname:"PC",destination:"캠핑장"})).data;
-        const b=(await api("/api/join","POST",{code:a.code,vehicleId:"tralala",nickname:"폰 B"})).data;
-        const c=(await api("/api/join","POST",{code:a.code,vehicleId:"tiramisu",nickname:"폰 C"})).data;
+        const a=(await api("/api/groups","POST",{name:"검증 그룹",nickname:"PC",model:"아이오닉 5",battery:80,destination:"캠핑장"})).data;
+        assert.equal(a.state.vehicles.length,1);
+        assert.equal(a.state.vehicles[0].status,"출발 대기");
+        assert.equal(a.state.vehicles[0].battery,80);
+        const display=(await api("/api/join","POST",{code:a.code,nickname:"차량 화면",display:true})).data;
+        assert.equal(display.state.vehicles.length,1);
+        assert.equal((await api("/api/join","POST",{code:a.code,nickname:"실패",model:"EV",battery:101})).status,400);
+        const b=(await api("/api/join","POST",{code:a.code,nickname:"민지",model:"EV6",battery:""})).data;
+        const c=(await api("/api/join","POST",{code:a.code,nickname:"준호",model:"아이오닉 6",battery:65})).data;
         assert.equal((await api("/api/join","POST",{code:"WRONG",vehicleId:"tralala"})).status,404);
         assert.equal((await api("/api/state","GET",undefined,c.token)).data.memberCount,3);
+        assert.equal(b.state.vehicles.find(v=>v.id===b.vehicleId).battery,null);
+        assert.equal((await api("/api/vehicles","POST",{status:"이동 중"},display.token)).status,403);
+        const extra=(await api("/api/join","POST",{code:a.code,nickname:"네번째",model:"EV9"})).data;
+        assert.equal(extra.state.vehicles.length,4);
+        const payload={code:a.code,nickname:"재시도",model:"EV3"};
+        const first=(await api("/api/join","POST",payload,undefined,"join-once")).data;
+        const second=(await api("/api/join","POST",payload,undefined,"join-once")).data;
+        assert.equal(first.vehicleId,second.vehicleId);
+        assert.equal(second.state.vehicles.length,5);
         await Promise.all([
             api("/api/memos","POST",{text:"얼음 2봉 부탁해요",vehicleId:"princess"},b.token,"memo-b"),
             api("/api/memos","POST",{text:"캠핑장 도착했어요"},c.token,"memo-c")
@@ -33,8 +48,8 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
         await api("/api/memos","POST",{text:"얼음 2봉 부탁해요"},b.token,"memo-b");
         const shared=(await api("/api/state","GET",undefined,a.token)).data;
         assert.equal(shared.memos.length,2);
-        assert.equal(shared.memos.find(m=>m.text.includes("얼음")).vehicleId,"tralala");
-        const todo=(await api("/api/todos","POST",{title:"얼음 2봉",ownerVehicleId:"princess"},b.token,"todo-b")).data.todos[0];
+        assert.equal(shared.memos.find(m=>m.text.includes("얼음")).vehicleId,b.vehicleId);
+        const todo=(await api("/api/todos","POST",{title:"얼음 2봉",ownerVehicleId:a.vehicleId},b.token,"todo-b")).data.todos[0];
         await api("/api/todos/"+todo.id,"PATCH",{status:"DOING"},a.token);
         assert.equal((await api("/api/state","GET",undefined,c.token)).data.todos[0].status,"DOING");
         await api("/api/todos/"+todo.id,"PATCH",{done:true},a.token);
@@ -42,7 +57,7 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
         assert.equal((await api("/api/todos/"+todo.id,"PATCH",{done:"false"},a.token)).status,400);
         assert.equal((await api("/api/group","PATCH",{destination:"다른 장소"},b.token)).status,403);
         await api("/api/group","PATCH",{destination:"솔향 캠핑장"},a.token);
-        const other=(await api("/api/groups","POST",{name:"다른 그룹",nickname:"다른 사람"})).data;
+        const other=(await api("/api/groups","POST",{name:"다른 그룹",nickname:"다른 사람",model:"EV3"})).data;
         assert.equal((await api("/api/state","GET",undefined,other.token)).data.memos.length,0);
         await stop();await start();
         const resumed=(await api("/api/state","GET",undefined,a.token)).data;

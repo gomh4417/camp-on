@@ -21,6 +21,8 @@ internal fun JSONObject.label(key:String)=optString(key).takeUnless { it.isBlank
 internal class JourneySession(context:Context) {
     private val prefs=context.getSharedPreferences("camp_on_journey",Context.MODE_PRIVATE)
     private val mutex=Mutex()
+    var connected by mutableStateOf(false)
+        private set
     private var accessToken=prefs.getString("token","").orEmpty()
     var serverUrl by mutableStateOf(prefs.getString("server","http://10.0.2.2:8787")!!)
         private set
@@ -41,7 +43,7 @@ internal class JourneySession(context:Context) {
         private set
     val fresh get()=state!=null && error.isBlank() && System.currentTimeMillis()-receivedAt in 0 until 10_000
     val editable get()=fresh && !busy && !refreshing
-    val vehicles get()=state?.objects("vehicles").orEmpty()
+    val vehicles get()=state?.objects("vehicles").orEmpty().filter { !it.has("joined") || it.optBoolean("joined") }
     val todos get()=state?.objects("todos").orEmpty()
     val requests get()=state?.objects("requests").orEmpty()
     val memos get()=state?.objects("memos").orEmpty()
@@ -63,10 +65,12 @@ internal class JourneySession(context:Context) {
             message="HTTPS 주소 또는 에뮬레이터 로컬 서버 주소를 입력하세요";return false
         }
         if(serverUrl!=url.toString()) { accessToken="";prefs.edit().remove("token").apply() }
-        serverUrl=url.toString();state=null;receivedAt=0;error="";message=""
+        serverUrl=url.toString();state=null;receivedAt=0;error="";message="";connected=false
         prefs.edit().putString("server",serverUrl).apply()
         return true
     }
+    fun connectLocal() { connected=true }
+    fun disconnect() { connected=false;state=null;receivedAt=0;message="";error="";accessToken="";prefs.edit().remove("token").apply() }
     fun enterCamp(s:CampSession):Boolean {
         if(!arrived || !s.parkingState.allowsControl) { message="내 차량 도착과 주차 상태를 확인하세요";return false }
         // A campsite is not the return destination. No HVAC or session actuation here.
@@ -96,23 +100,23 @@ internal class JourneySession(context:Context) {
         check(next.optJSONObject("group")!=null && next.optJSONArray("vehicles")!=null) { "그룹 응답 형식 확인 필요" }
         state=next;receivedAt=System.currentTimeMillis();error=""
     }
-    suspend fun join(code:String,role:String):Boolean {
-        if(busy || refreshing || role !in listOf("princess","tralala","tiramisu"))return false
+    suspend fun join(code:String,nickname:String):Boolean {
+        if(busy || refreshing || nickname.isBlank())return false
         busy=true
         return try { mutex.withLock {
-            val result=request("POST","/api/join",JSONObject().put("code",code.trim()).put("vehicleId",role))
+            val result=request("POST","/api/join",JSONObject().put("code",code.trim()).put("nickname",nickname.trim()).put("display",true))
             val token=result.getString("token")
             check(token.isNotBlank())
             accept(result)
-            accessToken=token;vehicleId=role
-            prefs.edit().putString("token",token).putString("vehicle",role).apply()
-            message="모바일 그룹과 연결됐어요";true
+            accessToken=token;vehicleId="";connected=true
+            prefs.edit().putString("token",token).putString("vehicle","").apply()
+            message="";true
         } } catch(e:CancellationException) { throw e }
         catch(_:Exception) { message="서버 주소와 초대 코드를 확인해 주세요";false }
         finally { busy=false }
     }
     suspend fun refresh() {
-        if(busy || refreshing)return
+        if(!connected || busy || refreshing)return
         refreshing=true
         try { mutex.withLock { accept(request("GET","/api/state")) } }
         catch(e:CancellationException) { throw e }
