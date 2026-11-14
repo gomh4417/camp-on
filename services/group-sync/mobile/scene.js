@@ -6,17 +6,15 @@ const reduced=matchMedia("(prefers-reduced-motion: reduce)");
 class CampScene extends HTMLElement {
     connectedCallback() {
         this.phase=phaseAtHour(new Date().getHours());
-        this.innerHTML='<div class="scene-frame"><img alt="같은 차량과 텐트의 시간대별 캠핑 풍경"><canvas role="img" aria-label="캠핑 풍경 정지 화면" hidden></canvas><span class="scene-label"></span></div><button type="button" class="scene-toggle"></button>';
+        this.innerHTML='<div class="scene-frame"><img alt="같은 차량과 텐트의 시간대별 캠핑 풍경"><canvas role="img" aria-label="캠핑 풍경 정지 화면" hidden></canvas><span class="scene-label"></span></div>';
         this.img=this.querySelector("img");this.canvas=this.querySelector("canvas");
-        this.button=this.querySelector("button");
-        this.button.onclick=()=>{localStorage.setItem("camp-scene-still",this.still?"false":"true");this.showLoop();};
         this.change=()=>this.showLoop();
         this.visibility=()=>{if(!document.hidden){clearTimeout(this.transitionTimer);this.phase=phaseAtHour(new Date().getHours());this.showLoop();}};
         reduced.addEventListener("change",this.change);document.addEventListener("visibilitychange",this.visibility);
         this.showLoop();this.tick=setInterval(()=>this.update(),1000);
     }
     disconnectedCallback(){clearInterval(this.tick);clearTimeout(this.transitionTimer);reduced.removeEventListener("change",this.change);document.removeEventListener("visibilitychange",this.visibility);this.loadId=(this.loadId||0)+1;this.img.removeAttribute("src");}
-    get still(){return reduced.matches||localStorage.getItem("camp-scene-still")==="true";}
+    get still(){return reduced.matches;}
     load(path) {
         const id=this.loadId=(this.loadId||0)+1;
         return new Promise(resolve=>{
@@ -34,8 +32,6 @@ class CampScene extends HTMLElement {
     showLoop(){
         clearTimeout(this.transitionTimer);
         this.querySelector(".scene-label").textContent=["새벽 · 아침","낮 · 오후","오후 · 해질녘","저녁 · 밤"][this.phase];
-        this.button.textContent=this.still?(reduced.matches?"기기 설정에 따라 정지 화면 표시":"풍경 움직임 켜기"):"정지 화면으로 보기";
-        this.button.disabled=reduced.matches;
         this.load("/camping/loops/"+phases[this.phase]);
     }
     async update(){

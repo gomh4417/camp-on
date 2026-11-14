@@ -24,7 +24,7 @@ internal fun cabinLightStatus(power:String?,brightness:Double?):String = when(po
     else -> "상태 확인 필요"
 }
 @Composable internal fun FHome(s:CampSession,still:Boolean,modifier:Modifier,onPanel:(String)->Unit,
-    onStill:()->Unit,onMode:(CampMode)->Unit,onTemperature:(Int)->Unit) {
+    onMode:(CampMode)->Unit,onTemperature:(Int)->Unit) {
     val temp=s.observed(ControlKind.TEMPERATURE)
     val auto=s.observed(ControlKind.AUTO)
     val power=s.observed(ControlKind.CABIN_LIGHT)
@@ -45,7 +45,7 @@ internal fun cabinLightStatus(power:String?,brightness:Double?):String = when(po
                     Row(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(16.dp)).background(if(selected)FBlue else Color.Transparent)
                         .clickable(enabled=!s.busy,role=Role.Tab){onMode(mode)}.semantics { this.selected=selected },
                         horizontalArrangement=Arrangement.spacedBy(10.dp,Alignment.CenterHorizontally),verticalAlignment=Alignment.CenterVertically) {
-                        Image(painterResource(when(mode){CampMode.COOK->R.drawable.figma_vector_cook;CampMode.SLEEP->R.drawable.camp_bed;else->R.drawable.figma_seat}),
+                        Image(painterResource(when(mode){CampMode.COOK->R.drawable.figma_vector_cook;CampMode.SLEEP->R.drawable.camp_bed;else->R.drawable.camp_chair_umbrella}),
                             null,Modifier.size(28.dp),colorFilter=ColorFilter.tint(color))
                         Text(mode.label,fontSize=24.sp,fontWeight=FontWeight.Medium,color=color,textAlign=TextAlign.Center)
                     }
@@ -122,7 +122,6 @@ internal fun cabinLightStatus(power:String?,brightness:Double?):String = when(po
         }
         Row(Modifier.fillMaxWidth().height(64.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {
             Text("외부 — · 실내 ${s.reading.cabin.takeIf { s.fresh && s.reading.isFresh("실내 온도",s.now) }.fmt()}°",Modifier.weight(1f),fontSize=21.sp,color=FMuted)
-            TextButton(onClick=onStill,modifier=Modifier.heightIn(min=56.dp)) { Text(if(still)"정지 화면 · 움직임 켜기" else "정지 화면으로 보기",fontSize=20.sp) }
             Box(Modifier.size(240.dp,64.dp)) { FButton(if(s.active)"캠핑 종료  →" else "캠핑 시작  →",0,0,240,64,enabled=!s.busy){onPanel(if(s.active)"departure" else "start")} }
         }
     }

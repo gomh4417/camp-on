@@ -26,6 +26,8 @@ internal class JourneySession(context:Context,preferencesName:String="camp_on_jo
         private set
     var tripStage by mutableStateOf("editing")
         private set
+    private var outboundTrip=prefs.getString("outboundTrip","{}").orEmpty()
+    val tripReturning get()=runCatching { JSONObject(tripSnapshot).optBoolean("returning") }.getOrDefault(false)
     var tripStartRequested by mutableStateOf(false)
     val canStartTrip get()=fresh && connected && vehicles.isNotEmpty() && tripStage=="ready"
     fun updateTripSnapshot(value:String) {
@@ -34,6 +36,39 @@ internal class JourneySession(context:Context,preferencesName:String="camp_on_jo
         tripStage=snapshot.optString("stage","editing")
     }
     fun finishTripPresentation() { tripSnapshot="{}";tripStage="editing";tripStartRequested=false }
+    fun completeOutboundTrip() {
+        if(tripReturning)return
+        outboundTrip=tripSnapshot
+        prefs.edit().putString("outboundTrip",outboundTrip).apply()
+        finishTripPresentation()
+    }
+    fun beginReturnTrip():Boolean {
+        if(tripReturning && tripStage in listOf("moving","returned"))return false
+        val saved=runCatching { JSONObject(outboundTrip) }.getOrNull()
+        val route=saved?.optJSONObject("route")
+        val points=route?.optJSONArray("points")
+        val lengths=route?.optJSONArray("lengths")
+        if(!fresh || vehicles.isEmpty() || points==null || lengths==null || points.length()<2 || points.length()!=lengths.length()) {
+            message="귀가 경로를 시작하려면 그룹 연결과 이동 경로를 확인해 주세요"
+            return false
+        }
+        val total=route.optDouble("total")
+        if(!total.isFinite() || total<=0)return false
+        val reversed=org.json.JSONArray()
+        val reversedLengths=org.json.JSONArray()
+        for(i in points.length()-1 downTo 0) {
+            reversed.put(points.getJSONArray(i))
+            reversedLengths.put(total-lengths.getDouble(i))
+        }
+        val members=org.json.JSONArray()
+        vehicles.forEach { members.put(JSONObject().put("id",it.optString("id")).put("name",it.label("name"))) }
+        val back=JSONObject().put("from",saved.getJSONArray("to")).put("to",saved.getJSONArray("from"))
+            .put("route",JSONObject().put("points",reversed).put("lengths",reversedLengths).put("total",total))
+            .put("members",members).put("elapsed",0).put("stage","moving").put("returning",true)
+        updateTripSnapshot(back.toString());tripStartRequested=false;message=""
+        return true
+    }
+    private fun clearOutboundTrip() { outboundTrip="{}";prefs.edit().remove("outboundTrip").apply() }
     var connected by mutableStateOf(false)
         private set
     private var accessToken=prefs.getString("token","").orEmpty()
@@ -80,7 +115,7 @@ internal class JourneySession(context:Context,preferencesName:String="camp_on_jo
         prefs.edit().putString("server",serverUrl).apply()
         return true
     }
-    fun disconnect() { finishTripPresentation();connected=false;state=null;receivedAt=0;message="";error="";accessToken="";prefs.edit().remove("token").apply() }
+    fun disconnect() { clearOutboundTrip();finishTripPresentation();connected=false;state=null;receivedAt=0;message="";error="";accessToken="";prefs.edit().remove("token").apply() }
     fun enterCamp(s:CampSession):Boolean {
         if(!arrived || !s.parkingState.allowsControl) { message="내 차량 도착과 주차 상태를 확인하세요";return false }
         // A campsite is not the return destination. No HVAC or session actuation here.
@@ -132,6 +167,7 @@ internal class JourneySession(context:Context,preferencesName:String="camp_on_jo
             val result=request("POST",if(createGroup)"/api/groups" else "/api/join",JSONObject().put("code",code.trim()).put("nickname",nickname.trim()).put("model",model.trim()).put("name",groupName.trim().ifBlank { "$nickname 캠핑 그룹" }))
             val token=result.getString("token")
             check(token.isNotBlank())
+            clearOutboundTrip()
             finishTripPresentation()
             accept(result)
             accessToken=token;vehicleId=result.getString("vehicleId");inviteCode=result.getString("code");connected=true

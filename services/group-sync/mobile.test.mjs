@@ -19,6 +19,11 @@ test("mobile renders registration and dynamic participant screens without fixed 
  input.value="12345";listeners.get("input")({target:input});assert.equal(input.value,"0427");
  input.value="0000";listeners.get("input")({target:input});assert.equal(input.value,"0000");
  assert.match(node("#screen").innerHTML,/name="nickname"/);
+ assert.match(node("#screen").innerHTML,/id="profile-initial"/);
+ listeners.get("input")({target:{name:"nickname",value:"😀동행",closest(){return null;}}});
+ assert.equal(node("#profile-initial").textContent,"😀");
+ listeners.get("input")({target:{name:"nickname",value:" 민지",closest(){return null;}}});
+ assert.equal(node("#profile-initial").textContent,"민");
  assert.match(node("#screen").innerHTML,/name="model"/);
  assert.match(node("#screen").innerHTML,/min="0" max="100"/);
  assert.doesNotMatch(node("#screen").innerHTML,/CAR B|CAR C|name="vehicleId"/);

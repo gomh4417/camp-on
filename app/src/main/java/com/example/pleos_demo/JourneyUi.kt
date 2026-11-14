@@ -29,15 +29,19 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-@Composable private fun Avatar(id:String,modifier:Modifier=Modifier) {
-    val drawable=when(id) { "princess"->R.drawable.mvp_profile_princess; "tralala"->R.drawable.mvp_profile_tralala;else->R.drawable.mvp_profile_tiramisu }
-    Image(painterResource(drawable),null,modifier.size(56.dp).clip(CircleShape))
+internal fun profileInitial(name:String):String = name.trim().let {
+    if(it.isEmpty())"?" else String(Character.toChars(it.codePointAt(0)))
+}
+@Composable private fun Avatar(name:String,modifier:Modifier=Modifier) {
+    Box(modifier.size(56.dp).clip(CircleShape).background(FPale),contentAlignment=Alignment.Center) {
+        Text(profileInitial(name),color=FBlue,style=MaterialTheme.typography.titleLarge)
+    }
 }
 @Composable private fun VehicleRow(j:JourneySession,v:JSONObject,selected:Boolean=false,action:()->Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if(selected)Color.White else Color(0xFFF7F7F8))
         .border(if(selected)2.dp else 0.dp,if(selected)Color(0xFFCFDFFF) else Color.Transparent,RoundedCornerShape(16.dp))
         .clickable(onClick=action).padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
-        Avatar(v.optString("id"))
+        Avatar(v.label("name"))
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(v.label("name"),color=if(v.optString("id")==j.vehicleId)CampAccent else CampInk,style=MaterialTheme.typography.titleMedium)
             Caption(v.label("listStatus"))
@@ -69,7 +73,7 @@ import org.json.JSONObject
     BackHandler(screen!=0) { screen=0 }
     LaunchedEffect(j.tripStage,j.fresh) {
         if(j.tripStage=="arrived" && j.fresh) {
-            j.finishTripPresentation()
+            j.completeOutboundTrip()
             onArrived()
         }
     }
@@ -87,7 +91,7 @@ import org.json.JSONObject
         0->{
             val left:@Composable ColumnScope.()->Unit={
                 Row(Modifier.fillMaxWidth().padding(vertical=22.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text(if(!j.connected)"함께 떠날 그룹을 연결해요" else if(!j.fresh)"그룹 연결을 확인해 주세요" else "${j.groupName}\n"+when { j.tripStage=="moving"->"함께 목적지로 이동해요"; j.vehicles.isEmpty()->"참여 차량을 기다리고 있어요"; j.vehicles.all { it.optString("status")=="도착" }->"모두 도착했어요"; j.vehicles.any { it.optString("status")=="이동 중" }->"이동 중인 차량이 있어요"; else->"출발 전, 소식을 나눠요" },Modifier.weight(1f),style=MaterialTheme.typography.headlineLarge)
+                    Text(if(!j.connected)"함께 떠날 그룹을 연결해요" else if(!j.fresh)"그룹 연결을 확인해 주세요" else "${j.groupName}\n"+when { j.tripStage=="returned"->"출발지에 도착했어요"; j.tripStage=="moving"->if(j.tripReturning)"함께 출발지로 돌아가요" else "함께 목적지로 이동해요"; j.vehicles.isEmpty()->"참여 차량을 기다리고 있어요"; j.vehicles.all { it.optString("status")=="도착" }->"모두 도착했어요"; j.vehicles.any { it.optString("status")=="이동 중" }->"이동 중인 차량이 있어요"; else->"출발 전, 소식을 나눠요" },Modifier.weight(1f),style=MaterialTheme.typography.headlineLarge)
                     Image(painterResource(R.drawable.mvp_camping),"캠핑 텐트",Modifier.size(112.dp))
                 }
                 Panel(Modifier.fillMaxWidth()) {
@@ -118,7 +122,7 @@ import org.json.JSONObject
             val detail:@Composable ()->Unit={
                 Panel(Modifier.fillMaxWidth()) {
                     Row(horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Avatar(vehicle?.optString("id").orEmpty(),Modifier.size(80.dp))
+                        Avatar(vehicle?.label("name").orEmpty(),Modifier.size(80.dp))
                         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("현재 상태");Text(vehicle?.label("status")?:"—",style=MaterialTheme.typography.headlineMedium) }
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("현재 위치");Text(vehicle?.label("location")?:"—");Caption("예상 도착");Text(vehicle?.label("eta")?:"—") }
                         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("남은 거리");Text(vehicle?.label("distance")?:"—");Caption("배터리");Text("${vehicle?.label("battery")?:"—"}%") }
@@ -144,7 +148,7 @@ import org.json.JSONObject
                             .background(if(requestId==r.optString("id"))Color(0xFFEAF2FF) else Color(0xFFF7F7F8))
                             .clickable { requestId=r.optString("id") }.padding(18.dp),
                             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                            Avatar(r.optString("fromVehicleId"));Text(r.label("item"))
+                            Avatar(j.name(r.optString("fromVehicleId")));Text(r.label("item"))
                         }
                     }
                     Spacer(Modifier.height(24.dp))
@@ -159,7 +163,7 @@ import org.json.JSONObject
                 if(j.memos.isEmpty())Caption("아직 메시지가 없어요")
                 j.memos.reversed().forEach { m->
                     Row(Modifier.fillMaxWidth().padding(vertical=20.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                        Avatar(m.optString("vehicleId"))
+                        Avatar(j.name(m.optString("vehicleId")))
                         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("${j.name(m.optString("vehicleId"))} · ${m.label("time")}");Text(m.label("text")) }
                     }
                     HorizontalDivider(color=CampLine)

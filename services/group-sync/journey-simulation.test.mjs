@@ -48,6 +48,17 @@ test("reduced motion has stationary pins, keeps timed completion and background 
  h.ctx.document.hidden=true;h.listeners.visibilitychange();h.advance(10000);assert.equal(h.ctx.groupTripSnapshot().elapsed,30000);
  h.ctx.document.hidden=false;h.listeners.visibilitychange();h.advance(31200);assert.equal(h.ctx.groupTripSnapshot().stage,"arrived");
 });
+test("return journey runs backwards to returned state without another camping arrival",async()=>{
+ const h=harness();await ready(h);const s=JSON.parse(JSON.stringify(h.ctx.groupTripSnapshot()));
+ s.route.points.reverse();s.route.lengths=[0,s.route.total];[s.from,s.to]=[s.to,s.from];
+ s.returning=true;s.stage="moving";s.elapsed=0;
+ const back=harness();back.ctx.restoreGroupTrip(s);back.advance(30000);
+ const pins=back.markers.filter(m=>m.options?.icon);
+ assert.ok(pins.every(m=>m.point[0]>37&&m.point[0]<37.01));
+ back.advance(31200);assert.equal(back.ctx.groupTripSnapshot().stage,"returned");
+ assert.ok(pins.every(m=>m.point[0]===37));
+ assert.match(back.e("info").textContent,/출발지에 도착/);
+});
 test("request failure cannot enable departure or fabricate route",async()=>{
  const h=harness();h.ctx.fetch=async()=>({ok:false});await ready(h);
  assert.equal(h.ctx.groupTripSnapshot().stage,"editing");assert.equal(h.ctx.startGroupTrip(),false);

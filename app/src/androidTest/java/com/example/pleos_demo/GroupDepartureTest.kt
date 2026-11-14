@@ -112,6 +112,35 @@ class GroupDepartureTest {
             compose.onNodeWithText("캠핑 준비").assertExists()
             assertFalse(session.active)
             assertTrue(host.vehicles.all { it.optString("status")=="출발 대기" })
+            assertEquals("친",profileInitial(" 친구"))
+            assertEquals("😀",profileInitial("😀동행"))
+            // The completed outbound geometry survives a new JourneySession instance.
+            val restored=JourneySession(context,prefix+"host")
+            runBlocking { assertTrue(restored.resumeMembership()) }
+            assertTrue(restored.beginReturnTrip())
+            val reverse=JSONObject(restored.tripSnapshot)
+            assertEquals(37.78,reverse.getJSONArray("from").getDouble(0),.000001)
+            assertEquals(37.77,reverse.getJSONArray("to").getDouble(0),.000001)
+            assertEquals(0.0,reverse.getJSONObject("route").getJSONArray("lengths").getDouble(0),.000001)
+            assertFalse(restored.beginReturnTrip()) // A second end tap must not restart the route.
+            compose.runOnIdle { assertTrue(host.beginReturnTrip());arrived=false }
+            compose.waitForIdle()
+            val returning=AtomicReference(false)
+            compose.waitUntil(20000) {
+                instrumentation.runOnMainSync {
+                    web=findWeb(compose.activity.window.decorView)
+                    web?.evaluateJavascript("!!window.groupTripSnapshot && window.groupTripSnapshot().returning") { returning.set(it=="true") }
+                }
+                returning.get()
+            }
+            js("window.restoreGroupTrip(Object.assign(window.groupTripSnapshot(),{elapsed:30000}))")
+            compose.waitUntil(5000) { host.tripReturning && JSONObject(host.tripSnapshot).optDouble("elapsed")>=30000 }
+            capture("50-group-return")
+            js("window.restoreGroupTrip(Object.assign(window.groupTripSnapshot(),{elapsed:62300}))")
+            compose.waitUntil(5000) { host.tripStage=="returned" }
+            assertFalse(arrived) // Return arrival must not reopen camping.
+            compose.onNodeWithText("출발지에 도착했어요",substring=true).assertExists()
+            assertTrue(host.vehicles.all { it.optString("status")=="출발 대기" })
         } finally {
             listOf("host","phone","third","camp").forEach { context.getSharedPreferences(prefix+it,0).edit().clear().commit() }
         }

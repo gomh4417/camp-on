@@ -95,6 +95,11 @@ class CampUxTest {
             compose.onNodeWithText("확인하고 적용").performClick()
             compose.waitUntil(15000) { vehicle.writes>0 && !s.busy }
             assertTrue(s.modeStatus=="적용 완료" || s.modeStatus=="차량값 확인 완료")
+            compose.runOnIdle { panel="departure";case++ }
+            compose.onNodeWithText("종료·복원").performClick()
+            compose.waitUntil(15000) { !s.active && s.written.isEmpty() }
+            compose.onNodeWithText("함께 이동").assertExists()
+            compose.onNodeWithText("정지 화면으로 보기").assertDoesNotExist()
         } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
     }
 }

@@ -101,7 +101,7 @@ private fun Double?.degree()=this?.let { if(it%1.0==0.0)it.toInt().toString() el
     var equipmentHours by rememberSaveable { mutableStateOf("") }
     var advanced by rememberSaveable { mutableIntStateOf(-1) }
     var journeyPage by rememberSaveable { mutableStateOf(startInJourney) }
-    var still by remember { mutableStateOf(s.fields["scene.still"]=="true") }
+    val still=false // System reduced-motion handling remains inside CampScene.
     var dateDraft by rememberSaveable { mutableStateOf("") }
     var timeReturn by rememberSaveable { mutableStateOf("setup") }
     var placeDraft by rememberSaveable { mutableStateOf("") }
@@ -162,7 +162,6 @@ private fun Double?.degree()=this?.let { if(it%1.0==0.0)it.toInt().toString() el
             } else {
                 FHome(s,still,Modifier.slot(40,110,1520,770+extra),
                     onPanel={panel=it},
-                    onStill={still=!still;s.edit("scene.still",still.toString())},
                     onMode={s.selectMode(it);panel="mode"},
                     onTemperature={stepTemp(it)})
 
@@ -426,15 +425,14 @@ private fun Double?.degree()=this?.let { if(it%1.0==0.0)it.toInt().toString() el
                             }
                             FButton("귀가 조건 확인",36,638+extra,778,64){panel="destination"}
                             FButton("종료·복원",36,718+extra,778,68,true,s.canControl && (s.active || s.written.isNotEmpty())){
-                                scope.launch{s.endAndRestore();if(!s.active && s.written.isEmpty())panel=""}
+                                scope.launch{s.endAndRestore();if(!s.active && s.written.isEmpty()){journey.beginReturnTrip();journeyPage=true;panel=""}}
                             }
                         }
                         "menu"->{
                             FButton("함께 이동 · 그룹 브리핑",36,170,778,84,true){journeyPage=true;panel=""}
                             FButton("캠핑 화면",36,280,778,84){journeyPage=false;panel=""}
                             FButton("Pleos 연결·지원 기능",36,390,778,84){panel="settings"}
-                            FButton(if(still)"장면 움직임 켜기" else "장면 정지 화면으로 보기",36,500,778,84){still=!still;s.edit("scene.still",still.toString())}
-                            FButton("캠핑 종료·귀가",36,610,778,84){panel="departure"}
+                            FButton("캠핑 종료·귀가",36,500,778,84){panel="departure"}
                         }
                         "settings"->{
                             Column(Modifier.slot(36,150,778,520+extra).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(18.dp)) {

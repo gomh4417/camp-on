@@ -14,6 +14,11 @@ try {
  await page.locator("camp-scene canvas").waitFor({state:"visible"});
  assert.equal(await page.evaluate(()=>document.fonts.check('16px "Asta Sans"')),true);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ assert.equal(await page.locator(".scene-toggle").count(),0);
+ const client=await (await fetch(origin+"/app.js")).text();
+ assert.ok(client.includes("profile-initial"));
+ const css=await (await fetch(origin+"/styles.css")).text();
+ assert.ok(css.includes("form{display:flex;flex-direction:column;gap:10px}"));
  await page.screenshot({path:"../../docs/verification/2026-11-14/mobile/public-live-390.png",fullPage:true});
- console.log("Public HTTPS page, font, GIF timing, still image and 390px layout verified; no participants created.");
+ console.log("Public HTTPS page, font, GIF timing, system reduced motion, nickname profile, spacing and 390px layout verified; no participants created.");
 } finally { await browser.close(); }

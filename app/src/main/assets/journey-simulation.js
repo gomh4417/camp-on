@@ -2,7 +2,7 @@
 (function () {
     const layer=L.layerGroup(),controls=L.control({position:"topright"});
     let members=[],memberKey="",from=null,to=null,picking=null,route=null,requestId=0,abort=null;
-    let markers=[],frameId=0,elapsed=0,lastTime=0,stage="editing",active=false;
+    let markers=[],frameId=0,elapsed=0,lastTime=0,stage="editing",active=false,returning=false;
     const reduced=matchMedia("(prefers-reduced-motion: reduce)");
     const root=document.createElement("section");
     root.className="trip-controls";root.setAttribute("aria-label","그룹 이동");
@@ -22,7 +22,7 @@
     function stopFrame(){cancelAnimationFrame(frameId);frameId=0;}
     function clearRoute(){
         stopFrame();requestId++;if(abort)abort.abort();abort=null;
-        route=null;markers=[];elapsed=0;stage="editing";layer.clearLayers();
+        route=null;markers=[];elapsed=0;stage="editing";returning=false;layer.clearLayers();
     }
     function pointPin(point,label){
         if(point)L.marker(point).bindTooltip(document.createTextNode(label),{permanent:true}).addTo(layer);
@@ -45,8 +45,8 @@
     el("center").onclick=()=>choose(map.getCenter());
     function profile(v,index){
         const card=document.createElement("div");card.className="trip-profile";
-        const img=document.createElement("img");img.src=avatars[index%avatars.length];img.alt="";
-        const name=document.createElement("span");name.textContent=v.name;card.append(img,name);
+        const initial=document.createElement("b");initial.className="trip-initial";initial.textContent=Array.from(v.name.trim())[0]||"?";
+        const name=document.createElement("span");name.textContent=v.name;card.append(initial,name);
         return L.divIcon({html:card,iconSize:[110,72],iconAnchor:[55,72+(index%3)*6],className:""});
     }
     function routePosition(points,lengths,distance){
@@ -63,12 +63,12 @@
             m.setLatLng(routePosition(route.points,route.lengths,route.total*(reduced.matches?(progress===1?1:0):progress)));
         });
         const done=markers.length>0&&elapsed>=60000+(markers.length-1)*1200;
-        info(stage==="ready"?"경로 설정 완료 · 함께 출발하기를 눌러 주세요.":done?"모두 도착했어요. 캠핑을 준비해요.":"함께 이동 중 · "+members.length+"명 · "+Math.min(100,Math.round(elapsed/(60000+Math.max(0,markers.length-1)*1200)*100))+"%");
+        info(stage==="ready"?"경로 설정 완료 · 함께 출발하기를 눌러 주세요.":done?(returning?"모두 출발지에 도착했어요.":"모두 도착했어요. 캠핑을 준비해요."):(returning?"출발지로 돌아가는 중 · ":"함께 이동 중 · ")+members.length+"명 · "+Math.min(100,Math.round(elapsed/(60000+Math.max(0,markers.length-1)*1200)*100))+"%");
         return done;
     }
     function tick(now){
         if(stage!=="moving")return;elapsed+=Math.min(100,Math.max(0,now-lastTime));lastTime=now;
-        if(draw()){stage="arrived";stopFrame();buttons();return;}
+        if(draw()){stage=returning?"returned":"arrived";stopFrame();buttons();return;}
         frameId=requestAnimationFrame(tick);
     }
     function play(){if(stage!=="moving"||frameId||document.hidden)return;lastTime=performance.now();frameId=requestAnimationFrame(tick);}
@@ -102,11 +102,12 @@
         stage="moving";elapsed=0;draw();buttons();play();return true;
     };
     // Snapshot survives map expansion and opening group messages; separate from observed vehicle state.
-    window.groupTripSnapshot=()=>({from,to,route,elapsed,stage,members});
+    window.groupTripSnapshot=()=>({from,to,route,elapsed,stage,members,returning});
     window.restoreGroupTrip=s=>{
         if(!s||!Array.isArray(s.members))return;
+        stopFrame();returning=s.returning===true;
         members=s.members;memberKey=JSON.stringify(members);from=s.from;to=s.to;route=s.route;elapsed=Number(s.elapsed)||0;
-        stage=route&&["ready","moving","arrived"].includes(s.stage)?s.stage:"editing";
+        stage=route&&["ready","moving","arrived","returned"].includes(s.stage)?s.stage:"editing";
         if(route){renderRoute();play();}else if(from||to){enter();showPoints();buttons();}
     };
     document.addEventListener("visibilitychange",()=>{if(document.hidden)stopFrame();else play();});

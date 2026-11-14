@@ -4,7 +4,7 @@ import {resolve,join} from "node:path";
 const adb=join(process.env.LOCALAPPDATA,"Android/Sdk/platform-tools/adb.exe");
 const out=resolve("../../docs/verification/2026-11-14/android");
 await mkdir(out,{recursive:true});
-const entries=process.argv.includes("--group-only")?["figma-verification/47-group-messages.png","figma-verification/48-group-moving.png"]:process.argv.includes("--screens-only")?["figma-verification"]:["figma-verification","pleos-sdk-verification.txt"];
+const entries=process.argv.includes("--group-only")?["figma-verification/41-ux-home.png","figma-verification/47-group-messages.png","figma-verification/48-group-moving.png","figma-verification/50-group-return.png"]:process.argv.includes("--screens-only")?["figma-verification"]:["figma-verification","pleos-sdk-verification.txt"];
 const result=spawnSync(adb,["-s","emulator-5554","exec-out","run-as","com.example.pleos_demo","--user","10","tar","-cf","-","-C","files",...entries],{maxBuffer:100*1024*1024});
 if(result.status!==0)throw new Error(result.stderr.toString());
 await writeFile(join(out,"evidence.tar"),result.stdout);
