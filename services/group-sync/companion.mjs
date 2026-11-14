@@ -3,10 +3,14 @@ import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
+import { gifDuration } from "./gif-duration.mjs";
 
 const root=dirname(fileURLToPath(import.meta.url));
 const file=process.env.COMPANION_DATA_FILE || join(root,"data","companion-live.json");
 const port=Number(process.env.PORT || 8788);
+const artRoot=join(root,"../../app/src/main/assets/camping");
+const sceneNames=["01_dawn_to_day.gif","02_day_to_dusk.gif","03_dusk_to_night.gif","04_night_to_dawn.gif"];
+let sceneTiming;
 
 let db={groups:{},sessions:{}};
 try { db=JSON.parse(await readFile(file,"utf8")); }
@@ -70,8 +74,18 @@ async function handle(req,res) {
     if(req.method==="OPTIONS")return json(res,204,{});
     const url=new URL(req.url,"http://localhost");
     if(url.pathname==="/api/health")return json(res,200,{ok:true});
+    if(req.method==="GET" && url.pathname==="/camping/timing.json") {
+        sceneTiming ??= Object.fromEntries(await Promise.all(sceneNames.map(async name=>[name,gifDuration(await readFile(join(artRoot,"transitions",name)))])));
+        return json(res,200,sceneTiming);
+    }
+    const art=/^\/camping\/(loops\/(?:01_dawn|02_day|03_dusk|04_night)_loop\.gif|transitions\/(?:01_dawn_to_day|02_day_to_dusk|03_dusk_to_night|04_night_to_dawn)\.gif)$/.exec(url.pathname);
+    if(req.method==="GET" && (art || url.pathname==="/asta-sans.ttf")) {
+        const body=await readFile(art?join(artRoot,art[1]):join(root,"../../app/src/main/res/font/asta_sans.ttf"));
+        res.writeHead(200,{"Content-Type":art?"image/gif":"font/ttf","Cache-Control":"public, max-age=86400","X-Content-Type-Options":"nosniff"});
+        return res.end(body);
+    }
     if(!url.pathname.startsWith("/api/")) {
-        const paths={"/":"index.html","/app.js":"app.js","/styles.css":"styles.css","/art.svg":"art.svg"};
+        const paths={"/":"index.html","/app.js":"app.js","/styles.css":"styles.css","/art.svg":"art.svg","/scene.js":"scene.js"};
         const path=paths[url.pathname];
         if(!path || req.method!=="GET")return json(res,404,{error:"찾을 수 없어요"});
         const body=await readFile(join(root,"mobile",path));

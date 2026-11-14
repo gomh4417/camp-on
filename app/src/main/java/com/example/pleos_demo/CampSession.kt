@@ -144,7 +144,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         val hours=remainingHours ?: return listOf(Equipment("",Double.NaN,0.0))
         return equipmentIds.zip(equipment()).map { (id,e)->
             val elapsed=if(active) ((now-(edited["hours$id"]?:now))/3_600_000.0).coerceAtLeast(0.0) else 0.0
-            e.copy(hours=if(e.hours.isFinite() && e.hours>=0) minOf((e.hours-elapsed).coerceAtLeast(0.0),hours) else Double.NaN)
+            e.copy(hours=if(fields["enabled$id"]=="false") 0.0 else if(e.hours.isFinite() && e.hours>=0) minOf((e.hours-elapsed).coerceAtLeast(0.0),hours) else Double.NaN)
         }
     }
     fun addEquipment(preset:Equipment=Equipment("새 장비",100.0,1.0)) {

@@ -1,0 +1,13 @@
+import {spawnSync} from "node:child_process";
+import {writeFile,mkdir,rm} from "node:fs/promises";
+import {resolve,join} from "node:path";
+const adb=join(process.env.LOCALAPPDATA,"Android/Sdk/platform-tools/adb.exe");
+const out=resolve("../../docs/verification/2026-11-14/android");
+await mkdir(out,{recursive:true});
+const result=spawnSync(adb,["-s","emulator-5554","exec-out","run-as","com.example.pleos_demo","--user","10","tar","-cf","-","-C","files","figma-verification","pleos-sdk-verification.txt"],{maxBuffer:100*1024*1024});
+if(result.status!==0)throw new Error(result.stderr.toString());
+await writeFile(join(out,"evidence.tar"),result.stdout);
+const extract=spawnSync("tar",["-xf",join(out,"evidence.tar"),"-C",out],{encoding:"utf8"});
+if(extract.status!==0)throw new Error(extract.stderr);
+await rm(join(out,"evidence.tar"));
+console.log(out);

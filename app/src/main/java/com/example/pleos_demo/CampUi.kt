@@ -63,7 +63,7 @@ internal fun controlValue(c:VehicleControl,v:Double?):String=when {
     }
     val s=remember { CampSession(context,source,"camp_on_v2") }
     DisposableEffect(s) { onDispose { s.save();source.close() } }
-    CampTheme { CampContent(s) }
+    CampTheme { FigmaCampContent(s) }
 }
 @Composable private fun CampContent(s:CampSession) {
     val scope=rememberCoroutineScope()

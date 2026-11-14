@@ -32,6 +32,26 @@ class CampSessionTest {
         override fun close() {}
     }
 
+    @Test fun disabledEquipmentUsesNoEnergyAndSurvivesRestartWithoutActuation()=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_equipment_enabled_${System.nanoTime()}"
+        val vehicle=VehicleFake()
+        try {
+            val s=CampSession(context,vehicle,name)
+            s.edit("end",java.time.LocalDateTime.now().plusHours(12).format(CampSession.format))
+            s.addEquipment(Equipment("냉장고",60.0,8.0))
+            val id=s.equipmentIds.last()
+            assertTrue(s.remainingEquipment().last().hours>0)
+            s.edit("enabled$id","false")
+            assertEquals(0.0,s.remainingEquipment().last().hours,0.0)
+            val resumed=CampSession(context,vehicle,name)
+            assertEquals(0.0,resumed.remainingEquipment().last().hours,0.0)
+            resumed.edit("enabled$id","true")
+            assertTrue(resumed.remainingEquipment().last().hours>0)
+            assertEquals(0,vehicle.writes)
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+    }
+
     @Test fun guideProgressAndTimerSurviveRestartWithoutVehicleWrites() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val name="test_guide_${System.nanoTime()}"

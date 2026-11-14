@@ -1,0 +1,177 @@
+{
+  "evidence": [
+    {
+      "screen": "01-desktop-landing",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "02-desktop-create",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "03-desktop-one-member",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "04-join-390",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "04-join-320",
+      "viewport": {
+        "width": 320,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "05-home-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "06-settings-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "07-todos-empty-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "08-chat-empty-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "05-home-390",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "06-settings-390",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "07-todos-empty-390",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "08-chat-empty-390",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "05-home-320",
+      "viewport": {
+        "width": 320,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "06-settings-320",
+      "viewport": {
+        "width": 320,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "07-todos-empty-320",
+      "viewport": {
+        "width": 320,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "08-chat-empty-320",
+      "viewport": {
+        "width": 320,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "09-synced-message",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "screen": "10-synced-todo-320",
+      "viewport": {
+        "width": 320,
+        "height": 900
+      },
+      "overflow": false
+    },
+    {
+      "check": "01_dawn_to_day once then 02_day loop",
+      "passed": true
+    },
+    {
+      "check": "02_day_to_dusk once then 03_dusk loop",
+      "passed": true
+    },
+    {
+      "check": "03_dusk_to_night once then 04_night loop",
+      "passed": true
+    },
+    {
+      "check": "04_night_to_dawn once then 01_dawn loop",
+      "passed": true
+    },
+    {
+      "check": "three independent sessions, 0427, message and todo sync, date/time at 320px, reduced motion",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

@@ -14,15 +14,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val CampInk=Color(0xFF191F28)
-internal val CampMuted=Color(0xFF6B717A)
-internal val CampAccent=Color(0xFF246BEB)
-internal val CampBackground=Color(0xFFF7F9FC)
+internal val CampInk=Color(0xFF182435)
+internal val CampMuted=Color(0xFF7B8798)
+internal val CampAccent=Color(0xFF2468EE)
+internal val CampBackground=Color(0xFFF4F7FC)
 internal val CampSurface=Color(0xFFFFFFFF)
 internal val CampLine=Color(0xFFE2E7EE)
 internal val CampWarning=Color(0xFF92510A)
-private val CampFont=FontFamily(Font(R.font.pretendard_regular,FontWeight.Normal),
-    Font(R.font.pretendard_medium,FontWeight.Medium),Font(R.font.pretendard_extrabold,FontWeight.ExtraBold))
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private val CampFont=FontFamily(
+    Font(R.font.asta_sans,FontWeight.Normal,variationSettings=androidx.compose.ui.text.font.FontVariation.Settings(androidx.compose.ui.text.font.FontVariation.weight(400))),
+    Font(R.font.asta_sans,FontWeight.Medium,variationSettings=androidx.compose.ui.text.font.FontVariation.Settings(androidx.compose.ui.text.font.FontVariation.weight(500))),
+    Font(R.font.asta_sans,FontWeight.ExtraBold,variationSettings=androidx.compose.ui.text.font.FontVariation.Settings(androidx.compose.ui.text.font.FontVariation.weight(800))))
 private fun type(size:Int,weight:FontWeight=FontWeight.Normal)=TextStyle(
     fontFamily=CampFont,fontSize=size.sp,lineHeight=(size*1.4).sp,fontWeight=weight)
 private val CampTypography=Typography(
