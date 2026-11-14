@@ -53,4 +53,32 @@ class CampAnimationTest {
             }
         }
     }
+
+    @Test fun composableSwitchesTransitionToNewLoop() {
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        val before=java.time.ZonedDateTime.of(2026,11,14,18,59,59,0,java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val clock=androidx.compose.runtime.mutableLongStateOf(before)
+        compose.setContent { CampScene(clock.longValue,false,Modifier.size(640.dp,360.dp)) }
+        fun findImage(v:android.view.View):ImageView? {
+            if(v is ImageView)return v
+            if(v is android.view.ViewGroup)for(i in 0 until v.childCount)findImage(v.getChildAt(i))?.let { return it }
+            return null
+        }
+        fun current():AnimatedImageDrawable? {
+            var found:AnimatedImageDrawable?=null
+            instrumentation.runOnMainSync {
+                val activity=androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).firstOrNull()
+                found=activity?.window?.decorView?.let { findImage(it) }?.drawable as? AnimatedImageDrawable
+            }
+            return found
+        }
+        compose.waitUntil(10000) { current()?.repeatCount==AnimatedImageDrawable.REPEAT_INFINITE }
+        val dusk=current()
+        compose.runOnIdle { clock.longValue=before+2000 }
+        compose.waitUntil(10000) { current()?.let { it!==dusk && it.repeatCount==0 }==true }
+        val transition=current()
+        compose.waitUntil(16000) { current()?.let { it!==transition && it.repeatCount==AnimatedImageDrawable.REPEAT_INFINITE && it.isRunning }==true }
+        assertNotSame(dusk,current())
+    }
 }
