@@ -61,11 +61,12 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
         assert.equal(second.state.vehicles.length,5);
         await Promise.all([
             api("/api/memos","POST",{text:"얼음 2봉 부탁해요",vehicleId:"princess"},b.token,"memo-b"),
-            api("/api/memos","POST",{text:"캠핑장 도착했어요"},c.token,"memo-c")
+            api("/api/memos","POST",{text:"중간에 휴게소에 들러요"},c.token,"memo-c")
         ]);
         await api("/api/memos","POST",{text:"얼음 2봉 부탁해요"},b.token,"memo-b");
         const shared=(await api("/api/state","GET",undefined,a.token)).data;
         assert.equal(shared.memos.length,2);
+        assert.equal(shared.memos.find(m=>m.text==="중간에 휴게소에 들러요").vehicleId,c.vehicleId);
         assert.equal(shared.memos.find(m=>m.text.includes("얼음")).vehicleId,b.vehicleId);
         const todo=(await api("/api/todos","POST",{title:"얼음 2봉",ownerVehicleId:a.vehicleId},b.token,"todo-b")).data.todos[0];
         await api("/api/todos/"+todo.id,"PATCH",{status:"DOING"},a.token);
@@ -82,6 +83,7 @@ test("three clients: invitation, authenticated briefing, idempotency, todo sync 
         const rejoined=(await api("/api/join","POST",{code:"0427",nickname:"재시작 후",model:"EV"})).data;
         assert.equal(rejoined.code,"0427");assert.equal(rejoined.state.group.name,"검증 그룹");
         const resumed=(await api("/api/state","GET",undefined,a.token)).data;
+        assert.equal(resumed.memos.find(m=>m.text==="중간에 휴게소에 들러요").vehicleId,c.vehicleId);
         assert.equal(resumed.memos.length,2);assert.equal(resumed.todos[0].done,true);
         assert.equal(resumed.group.destination,"솔향 캠핑장");
         await api("/api/todos/"+todo.id,"DELETE",undefined,a.token);

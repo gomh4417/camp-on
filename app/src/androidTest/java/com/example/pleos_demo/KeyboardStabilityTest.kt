@@ -30,6 +30,11 @@ class KeyboardStabilityTest {
         } }
         try {
             compose.onNodeWithText("그룹 연결",substring=false).performScrollTo().performClick()
+            compose.onNodeWithText("공유 서버 주소").assertDoesNotExist()
+            compose.onNodeWithText("새 그룹 만들기").assertIsSelected()
+            compose.onNodeWithText("코드로 참여").performClick().assertIsSelected()
+            compose.onNodeWithText("받은 초대 코드").assertExists()
+            compose.onNodeWithText("새 그룹 만들기").performClick()
             val nickname=compose.onNode(hasSetTextAction() and hasText("내 닉네임"))
             nickname.performClick().performTextInput("캠핑")
             val dialogId=compose.onNode(isDialog()).fetchSemanticsNode().id

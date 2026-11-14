@@ -17,6 +17,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -57,7 +60,6 @@ import org.json.JSONObject
     var connection by rememberSaveable { mutableStateOf(false) }
     var createGroup by rememberSaveable { mutableStateOf(true) }
     var composing by rememberSaveable { mutableStateOf(false) }
-    var address by rememberSaveable { mutableStateOf(j.serverUrl) }
     var inviteCode by rememberSaveable { mutableStateOf("") }
     var connectionName by rememberSaveable { mutableStateOf("") }
     var vehicleModel by rememberSaveable { mutableStateOf("") }
@@ -65,6 +67,12 @@ import org.json.JSONObject
     var memo by rememberSaveable { mutableStateOf("") }
     val vehicle=j.vehicles.firstOrNull { it.optString("id")==selected }?:j.myVehicle
     BackHandler(screen!=0) { screen=0 }
+    LaunchedEffect(j.tripStage,j.fresh) {
+        if(j.tripStage=="arrived" && j.fresh) {
+            j.finishTripPresentation()
+            onArrived()
+        }
+    }
     val openMap:()->Unit={screen=3}
     if(screen!=0) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
         FilledTonalIconButton(onClick={screen=0},modifier=Modifier.size(56.dp)) { Text("×") }
@@ -79,7 +87,7 @@ import org.json.JSONObject
         0->{
             val left:@Composable ColumnScope.()->Unit={
                 Row(Modifier.fillMaxWidth().padding(vertical=22.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text(if(!j.connected)"함께 떠날 그룹을 연결해요" else if(!j.fresh)"그룹 연결을 확인해 주세요" else "${j.groupName}\n"+when { j.vehicles.isEmpty()->"참여 차량을 기다리고 있어요"; j.vehicles.all { it.optString("status")=="도착" }->"모두 도착했어요"; j.vehicles.any { it.optString("status")=="이동 중" }->"이동 중인 차량이 있어요"; else->"출발 전, 소식을 나눠요" },Modifier.weight(1f),style=MaterialTheme.typography.headlineLarge)
+                    Text(if(!j.connected)"함께 떠날 그룹을 연결해요" else if(!j.fresh)"그룹 연결을 확인해 주세요" else "${j.groupName}\n"+when { j.tripStage=="moving"->"함께 목적지로 이동해요"; j.vehicles.isEmpty()->"참여 차량을 기다리고 있어요"; j.vehicles.all { it.optString("status")=="도착" }->"모두 도착했어요"; j.vehicles.any { it.optString("status")=="이동 중" }->"이동 중인 차량이 있어요"; else->"출발 전, 소식을 나눠요" },Modifier.weight(1f),style=MaterialTheme.typography.headlineLarge)
                     Image(painterResource(R.drawable.mvp_camping),"캠핑 텐트",Modifier.size(112.dp))
                 }
                 Panel(Modifier.fillMaxWidth()) {
@@ -99,7 +107,8 @@ import org.json.JSONObject
             } else { Column(verticalArrangement=Arrangement.spacedBy(24.dp),content=left);IntegratedJourneyMap(j,s,false,openMap) }
             Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                 PrimaryAction(if(j.connected)"그룹 연결 관리" else "그룹 연결") { connection=true }
-                PrimaryAction("캠핑 준비 화면",!s.busy) { onArrived() }
+                PrimaryAction(if(j.tripStage=="moving")"함께 이동 중" else "함께 출발하기",j.canStartTrip && !s.busy) { j.tripStartRequested=true }
+                SecondaryAction("그룹 메시지",j.connected) { screen=2 }
             }
         }
         1->{
@@ -146,7 +155,8 @@ import org.json.JSONObject
                 }
             }
             val logs:@Composable ()->Unit={Panel(Modifier.fillMaxWidth().heightIn(min=654.dp)) {
-                Text("그룹 대화",style=MaterialTheme.typography.titleLarge)
+                Text("전체 메시지",style=MaterialTheme.typography.titleLarge)
+                if(j.memos.isEmpty())Caption("아직 메시지가 없어요")
                 j.memos.reversed().forEach { m->
                     Row(Modifier.fillMaxWidth().padding(vertical=20.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                         Avatar(m.optString("vehicleId"))
@@ -165,15 +175,18 @@ import org.json.JSONObject
         OutlinedTextField(memo,{memo=it.take(500)},label={Text("가는 길의 소식·구매 요청")})
     },confirmButton={TextButton(onClick={scope.launch { if(j.memo(memo)){memo="";composing=false} }},enabled=j.editable&&memo.isNotBlank()) { Text("보내기") }},
         dismissButton={TextButton(onClick={composing=false}) { Text("닫기") }})
-    if(connection) AlertDialog(onDismissRequest={connection=false},title={Text("그룹 연결")},text={
+    if(connection) AlertDialog(onDismissRequest={connection=false},
+        modifier=Modifier.shadow(4.dp,RoundedCornerShape(28.dp)),containerColor=Color(0xFFFEFEFE),tonalElevation=0.dp,
+        title={Text("그룹 연결")},text={
         Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             if(!j.connected && j.inviteCode.isNotBlank()) SecondaryAction("내 그룹 다시 연결",!j.busy && !j.refreshing) { scope.launch { if(j.resumeMembership())connection=false } }
-            OutlinedTextField(address,{address=it},label={Text("공유 서버 주소")})
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected=createGroup,onClick={createGroup=true},label={Text("새 그룹 만들기")},
-                    modifier=Modifier.heightIn(min=56.dp),enabled=!j.busy)
-                FilterChip(selected=!createGroup,onClick={createGroup=false},label={Text("코드로 참여")},
-                    modifier=Modifier.heightIn(min=56.dp),enabled=!j.busy)
+            Row(horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
+                Button(onClick={createGroup=true},enabled=!j.busy,
+                    colors=ButtonDefaults.buttonColors(containerColor=FBlue,contentColor=Color.White),
+                    modifier=Modifier.heightIn(min=56.dp).semantics { this.selected=createGroup }) { Text("새 그룹 만들기") }
+                TextButton(onClick={createGroup=false},enabled=!j.busy,
+                    colors=ButtonDefaults.textButtonColors(contentColor=FBlue),
+                    modifier=Modifier.heightIn(min=56.dp).semantics { this.selected=!createGroup }) { Text("코드로 참여") }
             }
             OutlinedTextField(inviteCode,{if(it.length<=4 && it.all { digit->digit in '0'..'9' })inviteCode=it},
                 label={Text(if(createGroup)"초대 코드 정하기" else "받은 초대 코드")},
@@ -182,7 +195,6 @@ import org.json.JSONObject
             OutlinedTextField(connectionName,{connectionName=it.take(30)},label={Text("내 닉네임")})
             OutlinedTextField(vehicleModel,{vehicleModel=it.take(60)},label={Text("내 차량명")})
             if(createGroup)OutlinedTextField(groupTitle,{groupTitle=it.take(60)},label={Text("새 그룹 이름")})
-            Caption("내 차량으로 참여합니다. 초대받은 사람이 연결해야 다른 차량이 추가돼요.")
             if(j.connected) {
                 Text("초대 코드 · ${j.inviteCode}")
                 SecondaryAction("이 화면 연결 해제",!j.busy && !j.refreshing) { j.disconnect();connection=false }
@@ -197,7 +209,7 @@ import org.json.JSONObject
                 try {
                     // Let an in-flight poll finish instead of dropping the user's tap.
                     while(j.refreshing) kotlinx.coroutines.delay(50)
-                    if(j.connect(address)) {
+                    if(j.connect(j.serverUrl)) {
                         if(j.join(inviteCode,connectionName,vehicleModel,groupTitle,createGroup))connection=false
                     }
                 } finally { connecting=false }

@@ -18,9 +18,22 @@ internal fun JSONObject.objects(key:String):List<JSONObject> {
 }
 internal fun JSONObject.label(key:String)=optString(key).takeUnless { it.isBlank() || it=="null" }?:"—"
 
-internal class JourneySession(context:Context) {
-    private val prefs=context.getSharedPreferences("camp_on_journey_membership",Context.MODE_PRIVATE)
+internal class JourneySession(context:Context,preferencesName:String="camp_on_journey_membership") {
+    private val prefs=context.getSharedPreferences(preferencesName,Context.MODE_PRIVATE)
     private val mutex=Mutex()
+    // Local map presentation only; never used as observed arrival/gear or vehicle control permission.
+    var tripSnapshot by mutableStateOf("{}")
+        private set
+    var tripStage by mutableStateOf("editing")
+        private set
+    var tripStartRequested by mutableStateOf(false)
+    val canStartTrip get()=fresh && connected && vehicles.isNotEmpty() && tripStage=="ready"
+    fun updateTripSnapshot(value:String) {
+        val snapshot=runCatching { JSONObject(value) }.getOrNull()?:return
+        tripSnapshot=value
+        tripStage=snapshot.optString("stage","editing")
+    }
+    fun finishTripPresentation() { tripSnapshot="{}";tripStage="editing";tripStartRequested=false }
     var connected by mutableStateOf(false)
         private set
     private var accessToken=prefs.getString("token","").orEmpty()
@@ -67,7 +80,7 @@ internal class JourneySession(context:Context) {
         prefs.edit().putString("server",serverUrl).apply()
         return true
     }
-    fun disconnect() { connected=false;state=null;receivedAt=0;message="";error="";accessToken="";prefs.edit().remove("token").apply() }
+    fun disconnect() { finishTripPresentation();connected=false;state=null;receivedAt=0;message="";error="";accessToken="";prefs.edit().remove("token").apply() }
     fun enterCamp(s:CampSession):Boolean {
         if(!arrived || !s.parkingState.allowsControl) { message="내 차량 도착과 주차 상태를 확인하세요";return false }
         // A campsite is not the return destination. No HVAC or session actuation here.
@@ -119,13 +132,14 @@ internal class JourneySession(context:Context) {
             val result=request("POST",if(createGroup)"/api/groups" else "/api/join",JSONObject().put("code",code.trim()).put("nickname",nickname.trim()).put("model",model.trim()).put("name",groupName.trim().ifBlank { "$nickname 캠핑 그룹" }))
             val token=result.getString("token")
             check(token.isNotBlank())
+            finishTripPresentation()
             accept(result)
             accessToken=token;vehicleId=result.getString("vehicleId");inviteCode=result.getString("code");connected=true
             prefs.edit().putString("token",token).putString("vehicle",vehicleId).putString("code",inviteCode).apply()
-            message="그룹에 참여했어요 · ${vehicles.size}대";true
+            message="그룹에 참여했어요";true
         } } catch(e:CancellationException) { throw e }
         catch(e:GroupRequestException) { message=e.message.orEmpty();false }
-        catch(_:Exception) { message="서버 주소와 초대 코드를 확인해 주세요";false }
+        catch(_:Exception) { message="연결 상태와 초대 코드를 확인해 주세요";false }
         finally { busy=false }
     }
     suspend fun resumeMembership():Boolean {
@@ -134,9 +148,9 @@ internal class JourneySession(context:Context) {
         return try { mutex.withLock {
             val payload=request("GET","/api/state")
             check(payload.objects("vehicles").any { it.optString("id")==vehicleId })
-            accept(payload);connected=true;message="그룹에 다시 참여했어요 · ${vehicles.size}대";true
+            accept(payload);connected=true;message="그룹에 다시 참여했어요";true
         } } catch(e:CancellationException) { throw e }
-        catch(_:Exception) { message="이전 그룹 연결을 확인할 수 없어요. 주소와 초대 코드를 확인하세요";false }
+        catch(_:Exception) { message="이전 그룹에 연결하지 못했어요. 연결 상태와 초대 코드를 확인하세요";false }
         finally { busy=false }
     }
     suspend fun refresh() {

@@ -146,9 +146,9 @@ private fun Double?.degree()=this?.let { if(it%1.0==0.0)it.toInt().toString() el
     Surface(Modifier.fillMaxSize().safeDrawingPadding(),color=FBackground) {
         DesignViewport { extra ->
             Box(Modifier.slot(0,0,1600,82).background(Color.White))
-            Box(Modifier.slot(28,10,210,64).clickable(role=Role.Button){panel="menu"}.semantics { contentDescription="CAMP:ON 메뉴" })
+            Box(Modifier.slot(28,10,210,64).background(Color.White).clickable(interactionSource=remember { androidx.compose.foundation.interaction.MutableInteractionSource() },indication=null,role=Role.Button){panel="menu"}.semantics { contentDescription="CAMP:ON 메뉴" })
             FText("CAMP:ON",44,25,200,28,bold=true)
-            FText(when(s.parkingState.parked){true->"P";false->"—";null->"—"},267,25,40,28,FBlue,true)
+            if(!journeyPage) FText(when(s.parkingState.parked){true->"P";false->"—";null->"—"},267,25,40,28,FBlue,true)
             Box(Modifier.slot(321,27,1,28).background(Color(0xFFDCE3EE)))
             FText(if(journeyPage)"함께 이동" else if(s.active)"캠핑 중" else "캠핑 준비",344,29,180,22,bold=true)
             FText("외부 —",1130,29,145,22,FMuted)

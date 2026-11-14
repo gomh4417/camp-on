@@ -48,8 +48,9 @@ class CampUxTest {
         }
         try {
             compose.onNodeWithText("함께 이동").assertExists()
-            compose.onNodeWithText("캠핑 준비 화면").performScrollTo().performClick()
-            compose.onNodeWithContentDescription("닫기").performClick()
+            compose.onNodeWithText("함께 출발하기").assertIsNotEnabled()
+            // Camping controls are tested independently; group departure is covered by map flow tests.
+            compose.runOnIdle { journey=false;case++ }
             compose.onNodeWithText("OFF",useUnmergedTree=true).assertExists()
             assertEquals("OFF",cabinLightStatus("OFF",70.0))
             assertEquals("ON · 70%",cabinLightStatus("ON",70.0))
