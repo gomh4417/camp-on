@@ -41,7 +41,7 @@ class FigmaScreensTest {
         kotlinx.coroutines.runBlocking { s.refresh();s.refreshParking() }
         var case by mutableIntStateOf(0)
         var panel by mutableStateOf("")
-        compose.setContent { key(case) { CampTheme { FigmaCampContent(s,panel) } } }
+        compose.setContent { key(case) { CampTheme { FigmaCampContent(s,panel,startInJourney=false) } } }
         val dir=File(context.filesDir,"figma-verification").apply { mkdirs() }
         fun capture(id:String,p:String="",change:()->Unit={}) {
             compose.runOnIdle { vehicle.soc=if(p=="shortfall")20.0 else 75.0;change();kotlinx.coroutines.runBlocking { s.refresh() };panel=if(p.startsWith("lamp-"))"equipment" else if(p=="edit")"options" else p;case++ }

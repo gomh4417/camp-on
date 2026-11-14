@@ -64,7 +64,16 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
     fun awaiting(id:String)=results[id] in setOf("요청 중","전송됨 · 반영 대기","응답 확인 필요","실패 · 차량 반영 확인 필요","실패 · 응답 시간 초과","복원 보류 · 이전 요청 응답 대기") && written.containsKey(id)
     private fun restoring(id:String)=results[id] in setOf("복원 요청 중","복원 응답 확인 필요","복원 반영 대기","복원 응답 시간 초과")
     fun canAdjust(c:VehicleControl)=fresh && reading.isFresh(c.id,now) && current[c.id]!=null && connected && c.writable && parkingState.allows(c.kind) && !busy && !refreshing && !awaiting(c.id) && !restoring(c.id)
-    val canControl get()=fresh && connected && parkingState.allowsControl && !busy && !refreshing
+    // A background read already holds mutex; commands wait for it and revalidate before writing.
+    val canControl get()=fresh && connected && parkingState.allowsControl && !busy
+    val controlBlockReason:String? get()=when {
+        busy -> "차량 요청을 처리하고 있어요"
+        !endValid() -> "현재 이후의 종료 날짜·시각을 선택해 주세요"
+        !connected || !fresh -> "최신 차량 정보를 확인해 주세요"
+        parkingState.parked!=true -> "P단에서 캠핑을 시작하고 모드를 적용할 수 있어요"
+        !parkingState.allowsControl -> "차량 조작 허용 상태를 확인해 주세요"
+        else -> null
+    }
     val capacityKwh get()=if(fields["capacity"].isNullOrBlank()) reading.nominalCapacityKwh.takeIf { fresh && reading.isFresh("차량 공칭 용량",now) } else number("capacity")
     val soc get()=reading.soc.takeIf { fresh && reading.isFresh("배터리",now) }
     val current get()=reading.values
@@ -279,7 +288,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         busy=true
         try { mutex.withLock {
             readLatest()
-            if(!parkingState.allowsControl || !fresh) { message="주차 상태와 연결을 확인하세요";return@withLock }
+            if(!parkingState.allowsControl || !fresh || !connected) { message="P단·차량 연결·조작 허용 상태를 확인해 주세요";return@withLock }
             if(!endValid()) { message="종료 예정 시각을 설정하세요";return@withLock }
             if(written.isEmpty()) { initial.clear();results.clear() }
             current.filterKeys { reading.isFresh(it,now) }.forEach { (id,value)->if(id !in initial) initial[id]=value }
@@ -340,7 +349,7 @@ class CampSession(context:Context,val source:VehicleSource,storageName:String="c
         if(targets.isEmpty()) { busy=false;message="변경할 항목을 선택하세요";return }
         try { mutex.withLock {
             readLatest()
-            if(!parkingState.allowsControl || !fresh) { message="주차 상태와 연결을 확인하세요";return@withLock }
+            if(!parkingState.allowsControl || !fresh || !connected) { message="P단·차량 연결·조작 허용 상태를 확인해 주세요";return@withLock }
             val controls=reading.controls.filter { it.writable && targets.containsKey(it.id) }.sortedBy {
                 when {
                     it.kind==ControlKind.POWER->if(targets[it.id]==0.0) 99 else -3

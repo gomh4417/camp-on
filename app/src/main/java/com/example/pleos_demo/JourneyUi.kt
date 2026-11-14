@@ -35,13 +35,13 @@ import org.json.JSONObject
         .border(if(selected)2.dp else 0.dp,if(selected)Color(0xFFCFDFFF) else Color.Transparent,RoundedCornerShape(16.dp))
         .clickable(onClick=action).padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
         Avatar(v.optString("id"))
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(v.label("name"),color=if(v.optString("id")==j.vehicleId)CampAccent else CampInk,style=MaterialTheme.typography.titleMedium)
             Caption(v.label("listStatus"))
             if(v.has("model"))Caption(v.label("model"))
             if(v.optString("source")=="참여자 직접 입력")Caption("입력 시각 · ${v.label("updatedAt")}")
         }
-        Column(horizontalAlignment=Alignment.End) {
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp),horizontalAlignment=Alignment.End) {
             Text(if(v.optString("status")=="도착")"도착" else v.label("eta"))
             Caption(if(v.isNull("battery") || !v.has("battery"))"배터리 미입력" else "${v.label("battery")}% · ${v.label("source")}")
         }
@@ -99,7 +99,7 @@ import org.json.JSONObject
             } else { Column(verticalArrangement=Arrangement.spacedBy(24.dp),content=left);IntegratedJourneyMap(j,s,false,openMap) }
             Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                 PrimaryAction(if(j.connected)"그룹 연결 관리" else "그룹 연결") { connection=true }
-                PrimaryAction("도착 · 캠핑으로",j.arrived && s.parkingState.allowsControl && !s.busy) { if(j.enterCamp(s))onArrived() }
+                PrimaryAction("캠핑 준비 화면",!s.busy) { onArrived() }
             }
         }
         1->{
@@ -110,9 +110,9 @@ import org.json.JSONObject
                 Panel(Modifier.fillMaxWidth()) {
                     Row(horizontalArrangement=Arrangement.spacedBy(24.dp),verticalAlignment=Alignment.CenterVertically) {
                         Avatar(vehicle?.optString("id").orEmpty(),Modifier.size(80.dp))
-                        Column { Caption("현재 상태");Text(vehicle?.label("status")?:"—",style=MaterialTheme.typography.headlineMedium) }
-                        Column(Modifier.weight(1f)) { Caption("현재 위치");Text(vehicle?.label("location")?:"—");Caption("예상 도착");Text(vehicle?.label("eta")?:"—") }
-                        Column { Caption("남은 거리");Text(vehicle?.label("distance")?:"—");Caption("배터리");Text("${vehicle?.label("battery")?:"—"}%") }
+                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("현재 상태");Text(vehicle?.label("status")?:"—",style=MaterialTheme.typography.headlineMedium) }
+                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("현재 위치");Text(vehicle?.label("location")?:"—");Caption("예상 도착");Text(vehicle?.label("eta")?:"—") }
+                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("남은 거리");Text(vehicle?.label("distance")?:"—");Caption("배터리");Text("${vehicle?.label("battery")?:"—"}%") }
                     }
                 }
                 JourneyTodos(j,vehicle?.optString("id")?:j.vehicleId,Modifier.heightIn(min=430.dp))
@@ -150,14 +150,14 @@ import org.json.JSONObject
                 j.memos.reversed().forEach { m->
                     Row(Modifier.fillMaxWidth().padding(vertical=20.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                         Avatar(m.optString("vehicleId"))
-                        Column { Caption("${j.name(m.optString("vehicleId"))} · ${m.label("time")}");Text(m.label("text")) }
+                        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) { Caption("${j.name(m.optString("vehicleId"))} · ${m.label("time")}");Text(m.label("text")) }
                     }
                     HorizontalDivider(color=CampLine)
                 }
             }}
             if(wide) Row(horizontalArrangement=Arrangement.spacedBy(28.dp)) {
                 Column(Modifier.weight(1.25f),verticalArrangement=Arrangement.spacedBy(24.dp)) { requests() }
-                Column(Modifier.weight(1f)) { logs() }
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) { logs() }
             } else { requests();logs() }
         }
     }

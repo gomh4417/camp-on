@@ -41,7 +41,7 @@ internal val cabinSeats=listOf(
     Column(modifier.clip(RoundedCornerShape(28.dp)).background(CampSurface).padding(24.dp),
         verticalArrangement=Arrangement.spacedBy(16.dp)) {
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
-            Column {
+            Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Text("어느 자리를 편하게 할까요?",style=MaterialTheme.typography.titleLarge)
                 Caption("좌석을 누르면 여기서 조절할 수 있어요")
             }

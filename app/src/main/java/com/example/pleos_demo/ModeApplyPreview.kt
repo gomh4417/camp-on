@@ -23,11 +23,12 @@ import androidx.compose.ui.unit.dp
     var after by remember { mutableStateOf(true) }
     var details by remember { mutableStateOf(false) }
     val changed=controls.filter { !canRestore(current(it),s.target(it)) }
+    Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
         ModeArt(s.selected,Modifier.size(80.dp))
-        Column {
+        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text("차 안이 이렇게 달라져요",style=MaterialTheme.typography.titleLarge)
-            Caption("변경 ${changed.size}개 · 아래 그림은 적용 전 미리보기예요")
+            Caption("변경 예정 ${changed.size}개")
         }
     }
     Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -65,7 +66,7 @@ import androidx.compose.ui.unit.dp
             }
             listOf("ROW_1_LEFT" to Alignment.CenterStart,"ROW_1_RIGHT" to Alignment.CenterEnd).forEach { (area,align)->
                 val temp=controls.firstOrNull { it.kind==ControlKind.TEMPERATURE && area in it.id.substringAfter(":").split("+") }
-                Column(Modifier.align(align).width(labelWidth),horizontalAlignment=Alignment.CenterHorizontally) {
+                Column(Modifier.align(align).width(labelWidth),verticalArrangement=Arrangement.spacedBy(8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                     Caption(if(area.endsWith("LEFT"))"운전석" else "동승석")
                     Text(temp?.let { value(it).fmt()+"°" }?:"—",style=MaterialTheme.typography.headlineMedium,color=CampAccent)
                     if(temp!=null && after) Caption("현재 ${current(temp).fmt()}°")
@@ -97,6 +98,7 @@ import androidx.compose.ui.unit.dp
         Text("${controlValue(c,current(c))}  →  ${controlValue(c,s.target(c))}",color=if(c in changed)CampAccent else CampMuted)
     }
     Caption("확인하고 적용을 눌러야 차량에 전송돼요.")
+    }
 }
 @Composable private fun SummaryTile(title:String,value:String,modifier:Modifier) {
     Column(modifier.clip(RoundedCornerShape(16.dp)).background(CampBackground).padding(16.dp),

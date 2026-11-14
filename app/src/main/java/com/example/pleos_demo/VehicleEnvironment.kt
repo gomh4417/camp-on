@@ -54,7 +54,7 @@ private fun VehicleControl.zone():String {
                 val wide=maxWidth>=900.dp
                 Column(Modifier.fillMaxSize().padding(if(wide)24.dp else 16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                             Caption("내 차의 편안함")
                             Text("편한 자리로 바꿔볼까요?",style=MaterialTheme.typography.headlineMedium)
                         }
@@ -91,7 +91,7 @@ private fun VehicleControl.zone():String {
                     }
                     HorizontalDivider(color=CampLine)
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                             Text(if(s.busy) "차량 응답 확인 중" else if(s.written.keys.any { s.awaiting(it) }) "전송됨 · 차량 반영 대기" else "누르면 바로 전송됩니다",
                                 color=CampAccent,style=MaterialTheme.typography.titleMedium)
                             Caption(if(s.parkingState.unrestricted!=true) "Pleos 화면 제한 · 차량 상태를 확인하세요"

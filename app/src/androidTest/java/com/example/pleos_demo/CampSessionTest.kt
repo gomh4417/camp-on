@@ -32,6 +32,30 @@ class CampSessionTest {
         override fun close() {}
     }
 
+    @Test fun backgroundRefreshDoesNotDisableReadyStartAndSafetyStillBlocksWrites()=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="test_refresh_gate_${System.nanoTime()}"
+        val vehicle=VehicleFake()
+        try {
+            val s=CampSession(context,vehicle,name)
+            s.refresh()
+            s.refreshing=true
+            assertTrue(s.canControl)
+            assertNull(s.controlBlockReason)
+            s.start()
+            assertTrue(s.active)
+            assertEquals(0,vehicle.writes)
+            s.refreshing=false
+            vehicle.parked=false
+            s.refreshParking()
+            assertFalse(s.canControl)
+            s.applyMode()
+            assertEquals(0,vehicle.writes)
+            s.edit("end",java.time.LocalDateTime.now().minusMinutes(1).format(CampSession.format))
+            assertTrue(s.controlBlockReason!!.contains("종료"))
+        } finally { context.getSharedPreferences(name,0).edit().clear().commit() }
+    }
+
     @Test fun disabledEquipmentUsesNoEnergyAndSurvivesRestartWithoutActuation()=runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val name="test_equipment_enabled_${System.nanoTime()}"

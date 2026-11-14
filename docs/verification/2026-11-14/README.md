@@ -1,5 +1,7 @@
 # 2026-11-14 Figma 화면 교체 검증
 
+후속 수정: [함께 이동 복원·전체 높이·날짜 선택·시작 버튼 검증](ux-refinement.md). 아래는 최초 교체 기준이며 Android 캡처는 후속 UX 수정으로 갱신되었다.
+
 기준: [최종 UI, 212:562](https://www.figma.com/design/PrmxDA3qecUyoZqgU0CjEn/?node-id=212-562). 앱 영역 1600×900 좌표·Asta Sans·색상·카드·드로어를 Compose로 구현했다. Pleos 시스템의 좌측 차량과 하단 HVAC는 앱이 복제하지 않는다.
 
 ## 검수 범위와 판정
