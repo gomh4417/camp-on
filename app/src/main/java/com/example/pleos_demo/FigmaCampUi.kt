@@ -71,10 +71,17 @@ private fun Modifier.slot(x:Int,y:Int,w:Int,h:Int)=offset(x.dp,y.dp).size(w.dp,h
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val widthPx=with(density){maxWidth.toPx()}
         val heightPx=with(density){maxHeight.toPx()}
-        val scale=minOf(widthPx/1600f,heightPx/900f)
-        val canvasHeight=(heightPx/scale).toInt()
-        CompositionLocalProvider(LocalDensity provides Density(scale,density.fontScale)) {
-            Box(Modifier.fillMaxSize().background(FBackground)) { content(canvasHeight-900) }
+        // IME changes height on every animation frame. Density must not follow it:
+        // Compose Dialog keys its native window by density and would dismiss/recreate it.
+        val scale=(widthPx/1600f).coerceAtLeast(.01f)
+        val canvasHeight=(heightPx/scale).toInt().coerceAtLeast(900)
+        val designDensity=remember(scale,density.fontScale) { Density(scale,density.fontScale) }
+        CompositionLocalProvider(LocalDensity provides designDensity) {
+            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Box(Modifier.fillMaxWidth().height(canvasHeight.dp).background(FBackground)) {
+                    content(canvasHeight-900)
+                }
+            }
         }
     }
 }

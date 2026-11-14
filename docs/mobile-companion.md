@@ -14,6 +14,17 @@
 
 테스트는 임시 저장소에서만 가짜 참여자를 생성한다. verify-live.mjs는 상태 확인 GET만 수행한다. npm start는 실제 참여 서버를 시작한다. 기존 server.mjs는 회귀 테스트용이며 앱 기본 주소는 해당 서버(8787)를 사용하지 않는다.
 
+## 현재 모바일 접속 주소
+
+[모바일 웹 열기](https://corrected-bugs-highlights-scheduled.trycloudflare.com/)
+
+2026-11-14 확인: 위 주소의 /api/health는 HTTP 200, {"ok":true}.
+이전 winning-luxury-sustained-repeat.trycloudflare.com 주소는 DNS에서 더 이상 조회되지 않는다.
+차량 앱의 서버 주소는 http://10.0.2.2:8788 그대로 사용한다.
+
+이 주소는 영구 배포 주소가 아닌 실행 중인 PC의 임시 터널이다. 터널을 재생성하면 새 주소를 공유해야 한다.
+[Cloudflare 공식 안내](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/): 프로세스 종료 시 URL이 중단되고 새 터널은 다른 호스트명을 받는다.
+
 ## 실행
 
 ```powershell
